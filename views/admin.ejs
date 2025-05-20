@@ -1,0 +1,20 @@
+<h2>Додати пост</h2>
+<form action="/add" method="POST" enctype="multipart/form-data">
+  <input type="file" name="image" required>
+  <input type="text" name="caption" placeholder="Підпис" required>
+  <button type="submit">Додати</button>
+</form>
+
+<h2>Існуючі пости</h2>
+<ul>
+  <% posts.forEach(post => { %>
+    <li>
+      <img src="/uploads/<%= post.image %>" width="100" />
+      <p><%= post.caption %> — <%= post.date %></p>
+      <a href="/edit/<%= post.id %>">Редагувати</a>
+      <form method="POST" action="/delete/<%= post.id %>" style="display:inline;">
+        <button type="submit">Видалити</button>
+      </form>
+    </li>
+  <% }) %>
+</ul>
