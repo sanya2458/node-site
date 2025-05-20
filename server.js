@@ -52,7 +52,7 @@ app.get('/', (req, res) => {
   let html = `
     <html>
       <head>
-        <title>Пости</title>
+        <title>Фредлосграм</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; }
           .header { display: flex; justify-content: flex-end; margin-bottom: 20px; }
