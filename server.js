@@ -1,146 +1,181 @@
 const express = require('express');
-const multer = require('multer');
 const session = require('express-session');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+const bodyParser = require('body-parser');
 
 const app = express();
-const db = new sqlite3.Database('./database.db');
+// В Render порт береться із змінної оточення
+const PORT = process.env.PORT || 3000;
 
-app.set('view engine', 'ejs');
-app.use(express.static('public'));
-app.use(express.urlencoded({ extended: true }));
+let posts = [];
 
+const ADMIN_LOGIN = 'admin';
+const ADMIN_PASS = '1234';
+
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
-  secret: 'supersecret',
+  secret: 'simple-secret',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
 }));
 
-// Перевіряємо і створюємо папку для завантажень, якщо нема
-const uploadDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+function isAdmin(req, res, next) {
+  if (req.session && req.session.admin) next();
+  else res.redirect('/login');
 }
 
-// Налаштовуємо multer для збереження файлів в public/uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // Залишаємо оригінальне ім'я файлу або додаємо timestamp
-    const ext = path.extname(file.originalname);
-    const basename = path.basename(file.originalname, ext);
-    cb(null, basename + '-' + Date.now() + ext);
-  }
-});
-const upload = multer({ storage: storage });
-
-// Створюємо таблицю, якщо нема
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    image TEXT NOT NULL,
-    caption TEXT NOT NULL,
-    date TEXT NOT NULL
-  )`);
-});
-
-// Middleware для перевірки адміна
-const isAdmin = (req, res, next) => {
-  if (req.session.isAdmin) return next();
-  res.redirect('/');
-};
-
-// Головна сторінка — показ постів + кнопка "Вхід" зверху справа, якщо не залогінений
 app.get('/', (req, res) => {
-  db.all("SELECT * FROM posts ORDER BY id DESC", (err, posts) => {
-    res.render('index', { posts, isAdmin: req.session.isAdmin });
-  });
+  let html = `
+    <html>
+      <head>
+        <title>Пости</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          .header { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+          button, a.button-link {
+            background-color: #007BFF; color: white; border: none; padding: 10px 15px;
+            text-decoration: none; cursor: pointer; border-radius: 4px;
+          }
+          .post { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+          .admin-controls { margin-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">`;
+
+  if (req.session.admin) {
+    html += `<form method="POST" action="/logout" style="margin:0;">
+               <button type="submit">Вийти</button>
+             </form>`;
+  } else {
+    html += `<a href="/login" class="button-link">Увійти</a>`;
+  }
+
+  html += `</div><h1>Пости</h1>`;
+
+  if (posts.length === 0) {
+    html += `<p>Постів поки що немає.</p>`;
+  } else {
+    posts.forEach((post, i) => {
+      html += `<div class="post">
+        <h3>${post.title}</h3>
+        <p>${post.content}</p>`;
+      if (req.session.admin) {
+        html += `
+          <div class="admin-controls">
+            <a href="/edit/${i}">Редагувати</a> |
+            <a href="/delete/${i}" onclick="return confirm('Видалити цей пост?')">Видалити</a>
+          </div>`;
+      }
+      html += `</div>`;
+    });
+  }
+
+  if (req.session.admin) {
+    html += `<a href="/add"><button>Додати пост</button></a>`;
+  }
+
+  html += `</body></html>`;
+  res.send(html);
 });
 
-// Сторінка логіну (форму можна показувати модально або окремо)
 app.get('/login', (req, res) => {
-  res.render('login', { error: null });
+  if (req.session.admin) return res.redirect('/');
+  res.send(`
+    <html>
+      <head><title>Увійти</title></head>
+      <body>
+        <h2>Увійти як адмін</h2>
+        <form method="POST" action="/login">
+          Логін:<br><input name="login" required><br><br>
+          Пароль:<br><input type="password" name="password" required><br><br>
+          <button type="submit">Увійти</button>
+        </form>
+        <br><a href="/">Назад</a>
+      </body>
+    </html>
+  `);
 });
 
 app.post('/login', (req, res) => {
-  const { password } = req.body;
-  if (password === 'admin123') {
-    req.session.isAdmin = true;
+  const { login, password } = req.body;
+  if (login === ADMIN_LOGIN && password === ADMIN_PASS) {
+    req.session.admin = true;
     res.redirect('/');
   } else {
-    res.render('login', { error: 'Невірний пароль' });
+    res.send('Невірний логін або пароль. <a href="/login">Спробуйте знову</a>');
   }
 });
 
-app.get('/logout', (req, res) => {
+app.post('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
 });
 
-// Адмінка — список постів + форма додавання
-app.get('/admin', isAdmin, (req, res) => {
-  db.all("SELECT * FROM posts ORDER BY id DESC", (err, posts) => {
-    res.render('admin', { posts });
-  });
+app.get('/add', isAdmin, (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Додати пост</title></head>
+      <body>
+        <h2>Додати пост</h2>
+        <form method="POST" action="/add">
+          Заголовок:<br><input name="title" required><br><br>
+          Контент:<br><textarea name="content" rows="5" cols="30" required></textarea><br><br>
+          <button type="submit">Додати</button>
+        </form>
+        <br><a href="/">Назад</a>
+      </body>
+    </html>
+  `);
 });
 
-// Додати пост
-app.post('/add', isAdmin, upload.single('image'), (req, res) => {
-  const { caption } = req.body;
-  const date = new Date().toLocaleString();
-  const image = req.file.filename;
-
-  db.run("INSERT INTO posts (image, caption, date) VALUES (?, ?, ?)", [image, caption, date], (err) => {
-    if (err) {
-      console.error(err);
-    }
-    res.redirect('/admin');
-  });
+app.post('/add', isAdmin, (req, res) => {
+  const { title, content } = req.body;
+  posts.push({ title, content });
+  res.redirect('/');
 });
 
-// Редагувати пост — форма
 app.get('/edit/:id', isAdmin, (req, res) => {
-  db.get("SELECT * FROM posts WHERE id = ?", [req.params.id], (err, post) => {
-    if (!post) return res.redirect('/admin');
-    res.render('edit', { post });
-  });
+  const id = Number(req.params.id);
+  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
+
+  const post = posts[id];
+  res.send(`
+    <html>
+      <head><title>Редагувати пост</title></head>
+      <body>
+        <h2>Редагувати пост</h2>
+        <form method="POST" action="/edit/${id}">
+          Заголовок:<br><input name="title" value="${post.title}" required><br><br>
+          Контент:<br><textarea name="content" rows="5" cols="30" required>${post.content}</textarea><br><br>
+          <button type="submit">Зберегти</button>
+        </form>
+        <br><a href="/">Назад</a>
+      </body>
+    </html>
+  `);
 });
 
-// Оновити пост
 app.post('/edit/:id', isAdmin, (req, res) => {
-  const { caption } = req.body;
-  db.run("UPDATE posts SET caption = ? WHERE id = ?", [caption, req.params.id], (err) => {
-    if (err) {
-      console.error(err);
-    }
-    res.redirect('/admin');
-  });
+  const id = Number(req.params.id);
+  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
+
+  posts[id] = {
+    title: req.body.title,
+    content: req.body.content,
+  };
+  res.redirect('/');
 });
 
-// Видалити пост
-app.post('/delete/:id', isAdmin, (req, res) => {
-  db.get("SELECT image FROM posts WHERE id = ?", [req.params.id], (err, post) => {
-    if (post) {
-      const filepath = path.join(uploadDir, post.image);
-      if (fs.existsSync(filepath)) {
-        fs.unlinkSync(filepath);
-      }
-    }
-    db.run("DELETE FROM posts WHERE id = ?", [req.params.id], (err) => {
-      if (err) {
-        console.error(err);
-      }
-      res.redirect('/admin');
-    });
-  });
+app.get('/delete/:id', isAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
+
+  posts.splice(id, 1);
+  res.redirect('/');
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Сервер запущено на порту ${PORT}`);
+  console.log(`Server started on port ${PORT}`);
 });
+
