@@ -2,47 +2,30 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
-  <title>Вхід</title>
+  <title>Логін</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f4f4;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-    }
-    .login-container {
-      background: white;
-      padding: 30px 40px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      width: 320px;
-    }
-    h2 {
-      margin-bottom: 20px;
-      text-align: center;
-      color: #222;
-    }
-    input[type="password"] {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 15px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 16px;
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    form { max-width: 300px; margin: auto; }
+    input[type=password], button {
+      width: 100%; padding: 10px; margin: 10px 0;
+      border: 1px solid #ccc; border-radius: 4px;
     }
     button {
-      width: 100%;
-      padding: 10px;
-      background-color: #222;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-size: 16px;
+      background: #007bff; color: white; border: none;
       cursor: pointer;
-      transition: background-color 0.3s;
     }
-    button:hover {
-      background-color
+    button:hover { background: #0056b3; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h2>Вхід для адміністратора</h2>
+  <% if (error) { %>
+    <p class="error"><%= error %></p>
+  <% } %>
+  <form action="/login" method="POST">
+    <input type="password" name="password" placeholder="Пароль" required />
+    <button type="submit">Увійти</button>
+  </form>
+</body>
+</html>
