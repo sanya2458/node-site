@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Головна</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Пости</h1>
+  <div class="post-container">
+    <% posts.forEach(post => { %>
+      <div class="post">
+        <img src="/uploads/<%= post.image %>" />
+        <p><%= post.caption %></p>
+        <small><%= post.date %></small>
+      </div>
+    <% }) %>
+  </div>
+</body>
+</html>
