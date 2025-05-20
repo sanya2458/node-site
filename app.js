@@ -94,6 +94,5 @@ app.post('/delete/:id', isAdmin, (req, res) => {
   });
 });
 
-app.listen(3000, () => {
-  console.log('Сервер запущено на http://localhost:3000');
+const PORT = process.env.PORT
 });
