@@ -1,0 +1,6 @@
+<h2>Редагування поста</h2>
+<form method="POST">
+  <img src="/uploads/<%= post.image %>" width="200" />
+  <input type="text" name="caption" value="<%= post.caption %>" required>
+  <button type="submit">Зберегти</button>
+</form>
