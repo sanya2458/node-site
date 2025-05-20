@@ -1,9 +1,11 @@
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
-// В Render порт береться із змінної оточення
 const PORT = process.env.PORT || 3000;
 
 let posts = [];
@@ -18,11 +20,34 @@ app.use(session({
   saveUninitialized: false,
 }));
 
+// Папка для зберігання картинок
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Налаштування multer для завантаження файлів
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + ext);
+  }
+});
+const upload = multer({ storage });
+
+// Робимо папку 'public' статичною
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// Перевірка авторизації
 function isAdmin(req, res, next) {
   if (req.session && req.session.admin) next();
   else res.redirect('/login');
 }
 
+// Головна сторінка — показує пости з картинками
 app.get('/', (req, res) => {
   let html = `
     <html>
@@ -37,6 +62,7 @@ app.get('/', (req, res) => {
           }
           .post { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
           .admin-controls { margin-top: 10px; }
+          img { max-width: 300px; height: auto; display: block; margin-top: 10px; }
         </style>
       </head>
       <body>
@@ -59,6 +85,9 @@ app.get('/', (req, res) => {
       html += `<div class="post">
         <h3>${post.title}</h3>
         <p>${post.content}</p>`;
+      if (post.image) {
+        html += `<img src="${post.image}" alt="Image for post">`;
+      }
       if (req.session.admin) {
         html += `
           <div class="admin-controls">
@@ -78,6 +107,7 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
+// Логін
 app.get('/login', (req, res) => {
   if (req.session.admin) return res.redirect('/');
   res.send(`
@@ -106,21 +136,24 @@ app.post('/login', (req, res) => {
   }
 });
 
+// Логаут
 app.post('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
 });
 
+// Форма додавання поста (з картинкою)
 app.get('/add', isAdmin, (req, res) => {
   res.send(`
     <html>
       <head><title>Додати пост</title></head>
       <body>
         <h2>Додати пост</h2>
-        <form method="POST" action="/add">
+        <form method="POST" action="/add" enctype="multipart/form-data">
           Заголовок:<br><input name="title" required><br><br>
           Контент:<br><textarea name="content" rows="5" cols="30" required></textarea><br><br>
+          Картинка:<br><input type="file" name="image" accept="image/*" required><br><br>
           <button type="submit">Додати</button>
         </form>
         <br><a href="/">Назад</a>
@@ -129,12 +162,16 @@ app.get('/add', isAdmin, (req, res) => {
   `);
 });
 
-app.post('/add', isAdmin, (req, res) => {
+// Обробка додавання поста
+app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   const { title, content } = req.body;
-  posts.push({ title, content });
+  if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
+  const imagePath = `/public/uploads/${req.file.filename}`;
+  posts.push({ title, content, image: imagePath });
   res.redirect('/');
 });
 
+// Форма редагування поста
 app.get('/edit/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
@@ -145,9 +182,12 @@ app.get('/edit/:id', isAdmin, (req, res) => {
       <head><title>Редагувати пост</title></head>
       <body>
         <h2>Редагувати пост</h2>
-        <form method="POST" action="/edit/${id}">
+        <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
           Заголовок:<br><input name="title" value="${post.title}" required><br><br>
           Контент:<br><textarea name="content" rows="5" cols="30" required>${post.content}</textarea><br><br>
+          Поточна картинка:<br>
+          ${post.image ? `<img src="${post.image}" style="max-width:200px;"><br><br>` : 'Немає картинки<br><br>'}
+          Змінити картинку:<br><input type="file" name="image" accept="image/*"><br><br>
           <button type="submit">Зберегти</button>
         </form>
         <br><a href="/">Назад</a>
@@ -156,20 +196,32 @@ app.get('/edit/:id', isAdmin, (req, res) => {
   `);
 });
 
-app.post('/edit/:id', isAdmin, (req, res) => {
+// Обробка редагування поста
+app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
 
-  posts[id] = {
-    title: req.body.title,
-    content: req.body.content,
-  };
+  posts[id].title = req.body.title;
+  posts[id].content = req.body.content;
+
+  if (req.file) {
+    // Видаляємо стару картинку (необов’язково, можна залишити)
+    // fs.unlinkSync(path.join(__dirname, posts[id].image));
+
+    posts[id].image = `/public/uploads/${req.file.filename}`;
+  }
+
   res.redirect('/');
 });
 
+// Видалення поста
 app.get('/delete/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
+
+  // Видалити картинку теж можна, якщо хочеш
+  // const imgPath = path.join(__dirname, posts[id].image);
+  // if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
 
   posts.splice(id, 1);
   res.redirect('/');
