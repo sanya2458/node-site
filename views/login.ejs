@@ -4,26 +4,47 @@
   <meta charset="UTF-8" />
   <title>Логін</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    form { max-width: 300px; margin: auto; }
-    input[type=password], button {
-      width: 100%; padding: 10px; margin: 10px 0;
-      border: 1px solid #ccc; border-radius: 4px;
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    form {
+      background: white;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 300px;
+    }
+    input[type="password"], button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      font-size: 16px;
     }
     button {
-      background: #007bff; color: white; border: none;
+      background: #222;
+      color: white;
+      border: none;
       cursor: pointer;
     }
-    button:hover { background: #0056b3; }
-    .error { color: red; }
+    .error {
+      color: red;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
-  <h2>Вхід для адміністратора</h2>
-  <% if (error) { %>
-    <p class="error"><%= error %></p>
-  <% } %>
-  <form action="/login" method="POST">
+  <form method="POST" action="/login">
+    <h2>Вхід для адміністратора</h2>
+    <% if (error) { %>
+      <div class="error"><%= error %></div>
+    <% } %>
     <input type="password" name="password" placeholder="Пароль" required />
     <button type="submit">Увійти</button>
   </form>
