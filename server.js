@@ -9,7 +9,7 @@ const app = express();
 const db = new sqlite3.Database('./database.db');
 
 app.set('view engine', 'ejs');
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
@@ -18,8 +18,27 @@ app.use(session({
   saveUninitialized: false
 }));
 
-const upload = multer({ dest: 'public/uploads/' });
+// Перевіряємо і створюємо папку для завантажень, якщо нема
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
+// Налаштовуємо multer для збереження файлів в public/uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Залишаємо оригінальне ім'я файлу або додаємо timestamp
+    const ext = path.extname(file.originalname);
+    const basename = path.basename(file.originalname, ext);
+    cb(null, basename + '-' + Date.now() + ext);
+  }
+});
+const upload = multer({ storage: storage });
+
+// Створюємо таблицю, якщо нема
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,67 +48,99 @@ db.serialize(() => {
   )`);
 });
 
-// Middleware для перевірки авторизації
+// Middleware для перевірки адміна
 const isAdmin = (req, res, next) => {
   if (req.session.isAdmin) return next();
-  res.redirect('/login');
+  res.redirect('/');
 };
 
-// Головна сторінка з постами та кнопкою увійти
+// Головна сторінка — показ постів + кнопка "Вхід" зверху справа, якщо не залогінений
 app.get('/', (req, res) => {
   db.all("SELECT * FROM posts ORDER BY id DESC", (err, posts) => {
-    if (err) return res.status(500).send("Помилка бази даних");
     res.render('index', { posts, isAdmin: req.session.isAdmin });
   });
 });
 
-// Форма логіну
+// Сторінка логіну (форму можна показувати модально або окремо)
 app.get('/login', (req, res) => {
   res.render('login', { error: null });
 });
 
-// Обробка логіну
 app.post('/login', (req, res) => {
   const { password } = req.body;
   if (password === 'admin123') {
     req.session.isAdmin = true;
-    res.redirect('/admin');
+    res.redirect('/');
   } else {
     res.render('login', { error: 'Невірний пароль' });
   }
 });
 
-// Адмінка — список постів і форма додавання
-app.get('/admin', isAdmin, (req, res) => {
-  db.all("SELECT * FROM posts ORDER BY id DESC", (err, posts) => {
-    if (err) return res.status(500).send("Помилка бази даних");
-    res.render('admin', { posts });
-  });
-});
-
-// Додавання поста
-app.post('/add', isAdmin, upload.single('image'), (req, res) => {
-  const { caption } = req.body;
-  const date = new Date().toLocaleString();
-  if (!req.file) return res.status(400).send("Виберіть зображення");
-  const image = req.file.filename;
-
-  db.run("INSERT INTO posts (image, caption, date) VALUES (?, ?, ?)", [image, caption, date], (err) => {
-    if (err) return res.status(500).send("Помилка при додаванні поста");
-    res.redirect('/admin');
-  });
-});
-
-// Вихід з адмінки
 app.get('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
 });
 
-// Запуск сервера
+// Адмінка — список постів + форма додавання
+app.get('/admin', isAdmin, (req, res) => {
+  db.all("SELECT * FROM posts ORDER BY id DESC", (err, posts) => {
+    res.render('admin', { posts });
+  });
+});
+
+// Додати пост
+app.post('/add', isAdmin, upload.single('image'), (req, res) => {
+  const { caption } = req.body;
+  const date = new Date().toLocaleString();
+  const image = req.file.filename;
+
+  db.run("INSERT INTO posts (image, caption, date) VALUES (?, ?, ?)", [image, caption, date], (err) => {
+    if (err) {
+      console.error(err);
+    }
+    res.redirect('/admin');
+  });
+});
+
+// Редагувати пост — форма
+app.get('/edit/:id', isAdmin, (req, res) => {
+  db.get("SELECT * FROM posts WHERE id = ?", [req.params.id], (err, post) => {
+    if (!post) return res.redirect('/admin');
+    res.render('edit', { post });
+  });
+});
+
+// Оновити пост
+app.post('/edit/:id', isAdmin, (req, res) => {
+  const { caption } = req.body;
+  db.run("UPDATE posts SET caption = ? WHERE id = ?", [caption, req.params.id], (err) => {
+    if (err) {
+      console.error(err);
+    }
+    res.redirect('/admin');
+  });
+});
+
+// Видалити пост
+app.post('/delete/:id', isAdmin, (req, res) => {
+  db.get("SELECT image FROM posts WHERE id = ?", [req.params.id], (err, post) => {
+    if (post) {
+      const filepath = path.join(uploadDir, post.image);
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+      }
+    }
+    db.run("DELETE FROM posts WHERE id = ?", [req.params.id], (err) => {
+      if (err) {
+        console.error(err);
+      }
+      res.redirect('/admin');
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Сервер запущено на порту ${PORT}`);
 });
-
