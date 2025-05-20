@@ -1,20 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="uk">
 <head>
-  <meta charset="UTF-8">
-  <title>Головна</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8" />
+  <title>Головна сторінка</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    header {
+      display: flex;
+      justify-content: flex-end;
+      padding: 15px 30px;
+      background-color: #222;
+    }
+    header a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 16px;
+      padding: 8px 15px;
+      border: 2px solid white;
+      border-radius: 4px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    header a:hover {
+      background-color: white;
+      color: #222;
+    }
+    main {
+      padding: 20px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Пости</h1>
-  <div class="post-container">
-    <% posts.forEach(post => { %>
-      <div class="post">
-        <img src="/uploads/<%= post.image %>" />
-        <p><%= post.caption %></p>
-        <small><%= post.date %></small>
-      </div>
-    <% }) %>
-  </div>
+  <header>
+    <a href="/login">Ввійти</a>
+  </header>
+  <main>
+    <h1>Ласкаво просимо на сайт!</h1>
+    <!-- Тут твій основний контент -->
+  </main>
 </body>
 </html>
