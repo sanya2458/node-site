@@ -163,7 +163,9 @@ app.get('/', (req, res) => {
         <div class="header">
           <div class="header-buttons">
   `;
-
+  
+  html += `</div><div class="header-title">Фредлосграм</div>`;
+  
   if (req.session.admin) {
     html += `
       <form method="POST" action="/logout" style="margin:0;">
@@ -175,10 +177,10 @@ app.get('/', (req, res) => {
     html += `<a href="/login" class="button-link">Увійти</a>`;
   }
 
-  html += `</div><div class="header-title">Фредлосграм</div>`;
+  
 
   if (posts.length === 0) {
-    html += `<p>Постів поки що немає.</p>`;
+    html += `<p>тут покищо пусто.</p>`;
   } else {
     posts.forEach((post, i) => {
       html += `<div class="post">
@@ -212,7 +214,7 @@ app.get('/login', (req, res) => {
       </head>
       <body>
         <div class="container">
-          <h2>Увійти як адмін</h2>
+          <h2>ану вйди звідси розбійник</h2>
           <form method="POST" action="/login">
             <div class="form-group">
               <input type="text" name="login" placeholder="Логін" required>
