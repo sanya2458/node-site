@@ -75,7 +75,7 @@ const baseStyles = `
       align-items: center;
       padding: 15px;
       background-color: #30445c;
-      margin-bottom: 25px;
+      margin-bottom: 10px;
       position: relative;
     }
     .header-title {
@@ -104,6 +104,14 @@ const baseStyles = `
     }
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
+    }
+    /* ----------- БЛОК ДІЙ ----------- */
+    .action-buttons {
+      text-align: center;
+      margin: 0 auto 20px;
+    }
+    .action-buttons .button-link {
+      margin: 0 5px;
     }
     /* ----------- ПОСТИ (List) ----------- */
     .post {
@@ -182,15 +190,14 @@ app.get('/', (req, res) => {
         <div class="header">
           <div class="header-title">Фредлосграм</div>
           <div class="header-buttons">
-            <a href="/?view=${toggleView}" class="button-link">${toggleLabel}</a>
   `;
 
+  /* ----------  КНОПКИ В ХЕДЕРІ  ---------- */
   if (req.session.admin) {
     html += `
       <form method="POST" action="/logout" style="margin:0;">
         <button type="submit">Вийти</button>
       </form>
-      <a href="/add" class="button-link">Додати пост</a>
     `;
   } else {
     html += `<a href="/login" class="button-link">Увійти</a>`;
@@ -199,8 +206,20 @@ app.get('/', (req, res) => {
   html += `
           </div>
         </div>
-        <div class="container ${view === 'grid' ? 'posts-grid' : ''}">
   `;
+
+  /* ----------  КНОПКИ НИЖЧЕ ШАПКИ (тільки для адміна)  ---------- */
+  if (req.session.admin) {
+    html += `
+      <div class="action-buttons">
+        <a href="/?view=${toggleView}" class="button-link">${toggleLabel}</a>
+        <a href="/add" class="button-link">Додати пост</a>
+      </div>
+    `;
+  }
+
+  /* ----------  СПИСОК/ГРИД ПОСТІВ  ---------- */
+  html += `<div class="container ${view === 'grid' ? 'posts-grid' : ''}">`;
 
   if (sortedPosts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
