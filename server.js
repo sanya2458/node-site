@@ -148,7 +148,7 @@ app.get('/', (req, res) => {
     html += `<a href="/login" class="button-link">Увійти</a>`;
   }
 
-  html += `</div><div class="container"><h1>Пости</h1>`;
+  html += `</div><div class="container"><h1>ФРЕДЛОСГРАМ</h1>`;
 
   if (posts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
