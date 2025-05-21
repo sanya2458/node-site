@@ -65,7 +65,7 @@ const baseStyles = `
       color: #ffffff;
     }
     .container {
-      max-width: 960px;      /* ширше, щоб 2-в-ряд помістились */
+      max-width: 980px;
       margin: auto;
       padding: 20px;
     }
@@ -105,14 +105,14 @@ const baseStyles = `
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
     }
-    /* ----------- БЛОК ДІЙ ПІД ШАПКОЮ ----------- */
+    /* ----------- БЛОК ДІЙ ----------- */
     .action-buttons {
       text-align: center;
-      margin: 25px auto;   /* більший відступ під шапкою */
+      margin: 30px auto;
     }
     .action-buttons .button-link { margin: 0 6px; }
 
-    /* ----------- ПОСТИ (List) ----------- */
+    /* ----------- ПОСТИ (звичайний список) ----------- */
     .post {
       background-color: #2e3b4e;
       border-radius: 8px;
@@ -144,29 +144,33 @@ const baseStyles = `
 
     /* ----------- ГРИД 2-В-РЯД ----------- */
     .posts-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      display: flex;
+      flex-wrap: wrap;
       gap: 20px;
     }
     .posts-grid .post {
-      margin-bottom: 0;
+      width: calc(50% - 20px);  /* майже наполовину ширини */
       padding: 10px;
+      margin: 0;
+      box-sizing: border-box;
     }
     .posts-grid .post h3 { font-size: 1em; text-align: center; }
-    .posts-grid .post p  { display: none; } /* ховаємо підпис */
-    @media (max-width: 700px) {
-      .posts-grid { grid-template-columns: 1fr; }
+    .posts-grid .post p  { display: none; }          /* ховаємо підпис */
+    .posts-grid .post img{
+      max-height: 180px; object-fit: cover;          /* менше зображення */
+    }
+    @media (max-width: 720px) {
+      .posts-grid .post { width: 100%; }             /* на вузьких екранах у стовпчик */
     }
   </style>
 `;
 
 /* ----------  ГОЛОВНА  ---------- */
 app.get('/', (req, res) => {
-  const view = req.query.view === 'grid' ? 'grid' : 'list';
+  const view        = req.query.view === 'grid' ? 'grid' : 'list';
   const toggleLabel = view === 'grid' ? 'Список' : '2-в-ряд';
   const toggleView  = view === 'grid' ? 'list' : 'grid';
 
-  /* сортування за order */
   const sortedPosts = [...posts].sort(
     (a, b) => (a.order ?? 1e9) - (b.order ?? 1e9)
   );
@@ -196,7 +200,7 @@ app.get('/', (req, res) => {
 
   html += `</div></div>`;
 
-  /* ----------  КНОПКИ ПІД ШАПКОЮ (тільки для адміна)  ---------- */
+  /* ----------  КНОПКИ ПІД ШАПКОЮ (для адміна) ---------- */
   if (req.session.admin) {
     html += `
       <div class="action-buttons">
@@ -206,23 +210,23 @@ app.get('/', (req, res) => {
     `;
   }
 
-  /* ----------  ВИВІД ПОСТІВ  ---------- */
+  /* ----------  ВИВІД ПОСТІВ ---------- */
   html += `<div class="container ${view === 'grid' ? 'posts-grid' : ''}">`;
 
   if (sortedPosts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
   } else {
-    sortedPosts.forEach(post => {
-      const idx = posts.indexOf(post);
+    sortedPosts.forEach(p => {
+      const i = posts.indexOf(p);
       html += `
         <div class="post">
-          <h3>${post.title}</h3>
-          <img src="${post.image}" alt="Image for post">
-          ${view === 'list' ? `<p>${post.content}</p>` : ''}
+          <h3>${p.title}</h3>
+          <img src="${p.image}" alt="image">
+          ${view === 'list' ? `<p>${p.content}</p>` : ''}
           ${req.session.admin ? `
             <div class="admin-controls">
-              <a href="/edit/${idx}">Редагувати</a> |
-              <a href="/delete/${idx}" onclick="return confirm('Видалити цей пост?')">Видалити</a>
+              <a href="/edit/${i}">Редагувати</a> |
+              <a href="/delete/${i}" onclick="return confirm('Видалити цей пост?')">Видалити</a>
             </div>` : ''}
         </div>
       `;
@@ -233,156 +237,92 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-/* ----------  ЛОГІН  ---------- */
+/* ----------  ЛОГІН ---------- */
 app.get('/login', (req, res) => {
   if (req.session.admin) return res.redirect('/');
   res.send(`
-    <html>
-      <head>
-        <title>Увійти</title>
-        ${baseStyles}
-      </head>
-      <body>
-        <div class="container">
-          <h2>Увійти як адмін</h2>
-          <form method="POST" action="/login">
-            <div class="form-group">
-              <input type="text" name="login" placeholder="Логін" required>
-            </div>
-            <div class="form-group">
-              <input type="password" name="password" placeholder="Пароль" required>
-            </div>
-            <button type="submit">Увійти</button>
-          </form>
-          <div class="add-button">
-            <a href="/" class="button-link">Назад</a>
-          </div>
-        </div>
-      </body>
-    </html>
+    <html><head><title>Увійти</title>${baseStyles}</head><body>
+      <div class="container">
+        <h2>Увійти як адмін</h2>
+        <form method="POST" action="/login">
+          <div class="form-group"><input type="text" name="login" placeholder="Логін" required></div>
+          <div class="form-group"><input type="password" name="password" placeholder="Пароль" required></div>
+          <button type="submit">Увійти</button>
+        </form>
+        <div class="add-button"><a href="/" class="button-link">Назад</a></div>
+      </div>
+    </body></html>
   `);
 });
 app.post('/login', (req, res) => {
   const { login, password } = req.body;
   if (login === ADMIN_LOGIN && password === ADMIN_PASS) {
-    req.session.admin = true;
-    res.redirect('/');
+    req.session.admin = true; res.redirect('/');
   } else {
     res.send('Невірний логін або пароль. <a href="/login">Спробуйте знову</a>');
   }
 });
-app.post('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/'));
-});
+app.post('/logout', (req, res) => { req.session.destroy(() => res.redirect('/')); });
 
-/* ----------  ДОДАТИ ПОСТ  ---------- */
+/* ----------  ДОДАТИ ПОСТ ---------- */
 app.get('/add', isAdmin, (_, res) => {
   res.send(`
-    <html>
-      <head>
-        <title>Додати пост</title>
-        ${baseStyles}
-      </head>
-      <body>
-        <div class="container">
-          <h2>Додати пост</h2>
-          <form method="POST" action="/add" enctype="multipart/form-data">
-            <div class="form-group">
-              <input name="title" placeholder="Заголовок" required>
-            </div>
-            <div class="form-group">
-              <textarea name="content" placeholder="Контент" rows="5" required></textarea>
-            </div>
-            <div class="form-group">
-              <input type="number" name="order" placeholder="Позиція (1,2,3…)" min="1" required>
-            </div>
-            <div class="form-group">
-              <input type="file" name="image" accept="image/*" required>
-            </div>
-            <button type="submit">Додати</button>
-          </form>
-          <div class="add-button">
-            <a href="/" class="button-link">Назад</a>
-          </div>
-        </div>
-      </body>
-    </html>
+    <html><head><title>Додати пост</title>${baseStyles}</head><body>
+      <div class="container">
+        <h2>Додати пост</h2>
+        <form method="POST" action="/add" enctype="multipart/form-data">
+          <div class="form-group"><input name="title" placeholder="Заголовок" required></div>
+          <div class="form-group"><textarea name="content" rows="5" placeholder="Контент" required></textarea></div>
+          <div class="form-group"><input type="number" name="order" placeholder="Позиція (1,2,3…)" min="1" required></div>
+          <div class="form-group"><input type="file" name="image" accept="image/*" required></div>
+          <button type="submit">Додати</button>
+        </form>
+        <div class="add-button"><a href="/" class="button-link">Назад</a></div>
+      </div>
+    </body></html>
   `);
 });
 app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   const { title, content, order } = req.body;
   if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
-  posts.push({
-    title,
-    content,
-    order: parseInt(order, 10),
-    image: `/public/uploads/${req.file.filename}`
-  });
-  savePosts();
-  res.redirect('/');
+  posts.push({ title, content, order: parseInt(order,10), image:`/public/uploads/${req.file.filename}` });
+  savePosts(); res.redirect('/');
 });
 
-/* ----------  РЕДАГУВАТИ ПОСТ  ---------- */
+/* ----------  РЕДАГУВАТИ ПОСТ ---------- */
 app.get('/edit/:id', isAdmin, (req, res) => {
-  const id = Number(req.params.id);
-  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-  const post = posts[id];
+  const id = Number(req.params.id); if (id<0||id>=posts.length) return res.send('Пост не знайдено.');
+  const p = posts[id];
   res.send(`
-    <html>
-      <head>
-        <title>Редагувати пост</title>
-        ${baseStyles}
-      </head>
-      <body>
-        <div class="container">
-          <h2>Редагувати пост</h2>
-          <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
-            <div class="form-group">
-              <input name="title" value="${post.title}" required>
-            </div>
-            <div class="form-group">
-              <textarea name="content" rows="5" required>${post.content}</textarea>
-            </div>
-            <div class="form-group">
-              <input type="number" name="order" value="${post.order ?? ''}" min="1" required>
-            </div>
-            <div class="form-group">
-              Поточна картинка:<br>
-              ${post.image ? `<img src="${post.image}" style="max-width:100%; margin-top:10px;"><br>` : 'Немає картинки'}
-            </div>
-            <div class="form-group">
-              Змінити картинку:<br>
-              <input type="file" name="image" accept="image/*">
-            </div>
-            <button type="submit">Зберегти</button>
-          </form>
-          <div class="add-button">
-            <a href="/" class="button-link">Назад</a>
-          </div>
-        </div>
-      </body>
-    </html>
+    <html><head><title>Редагувати пост</title>${baseStyles}</head><body>
+      <div class="container">
+        <h2>Редагувати пост</h2>
+        <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
+          <div class="form-group"><input name="title" value="${p.title}" required></div>
+          <div class="form-group"><textarea name="content" rows="5" required>${p.content}</textarea></div>
+          <div class="form-group"><input type="number" name="order" value="${p.order??''}" min="1" required></div>
+          <div class="form-group">Поточна картинка:<br>${p.image?`<img src="${p.image}" style="max-width:100%;margin-top:10px;"><br>`:'Немає'}</div>
+          <div class="form-group"><input type="file" name="image" accept="image/*"></div>
+          <button type="submit">Зберегти</button>
+        </form>
+        <div class="add-button"><a href="/" class="button-link">Назад</a></div>
+      </div>
+    </body></html>
   `);
 });
 app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
-  const id = Number(req.params.id);
-  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-  posts[id].title   = req.body.title;
-  posts[id].content = req.body.content;
-  posts[id].order   = parseInt(req.body.order, 10);
-  if (req.file) posts[id].image = `/public/uploads/${req.file.filename}`;
-  savePosts();
-  res.redirect('/');
+  const id=Number(req.params.id); if(id<0||id>=posts.length) return res.send('Пост не знайдено.');
+  posts[id].title=req.body.title; posts[id].content=req.body.content;
+  posts[id].order=parseInt(req.body.order,10);
+  if(req.file) posts[id].image=`/public/uploads/${req.file.filename}`;
+  savePosts(); res.redirect('/');
 });
 
-/* ----------  ВИДАЛИТИ ПОСТ  ---------- */
-app.get('/delete/:id', isAdmin, (req, res) => {
-  const id = Number(req.params.id);
-  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-  posts.splice(id, 1);
-  savePosts();
-  res.redirect('/');
+/* ----------  ВИДАЛИТИ ПОСТ ---------- */
+app.get('/delete/:id', isAdmin, (req,res)=>{const id=Number(req.params.id);
+  if(id<0||id>=posts.length) return res.send('Пост не знайдено.');
+  posts.splice(id,1); savePosts(); res.redirect('/');
 });
 
-/* ----------  СТАРТ СЕРВЕРА  ---------- */
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+/* ----------  СТАРТ СЕРВЕРА ---------- */
+app.listen(PORT, ()=>console.log('Server started on port '+PORT));
