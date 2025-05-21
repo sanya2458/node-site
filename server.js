@@ -65,7 +65,7 @@ const baseStyles = `
       color: #ffffff;
     }
     .container {
-      max-width: 980px;
+      max-width: 1000px;
       margin: auto;
       padding: 20px;
     }
@@ -105,14 +105,14 @@ const baseStyles = `
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
     }
-    /* ----------- БЛОК ДІЙ ----------- */
+    /* ----------- БЛОК ДІЙ ПІД ШАПКОЮ ----------- */
     .action-buttons {
       text-align: center;
       margin: 30px auto;
     }
     .action-buttons .button-link { margin: 0 6px; }
 
-    /* ----------- ПОСТИ (звичайний список) ----------- */
+    /* ----------- ПОСТ (звичайний список) ----------- */
     .post {
       background-color: #2e3b4e;
       border-radius: 8px;
@@ -142,25 +142,21 @@ const baseStyles = `
     }
     .add-button { text-align: center; margin-top: 20px; }
 
-    /* ----------- ГРИД 2-В-РЯД ----------- */
+    /* ----------- ГРИД 2-В-РЯД (працює й на телефоні) ----------- */
     .posts-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
     }
     .posts-grid .post {
-      width: calc(50% - 20px);  /* майже наполовину ширини */
       padding: 10px;
       margin: 0;
-      box-sizing: border-box;
     }
     .posts-grid .post h3 { font-size: 1em; text-align: center; }
-    .posts-grid .post p  { display: none; }          /* ховаємо підпис */
+    .posts-grid .post p  { display: none; }      /* ховаємо підпис */
     .posts-grid .post img{
-      max-height: 180px; object-fit: cover;          /* менше зображення */
-    }
-    @media (max-width: 720px) {
-      .posts-grid .post { width: 100%; }             /* на вузьких екранах у стовпчик */
+      max-height: 160px;
+      object-fit: cover;
     }
   </style>
 `;
@@ -187,7 +183,6 @@ app.get('/', (req, res) => {
           <div class="header-buttons">
   `;
 
-  /* ----------  КНОПКИ В ХЕДЕРІ  ---------- */
   if (req.session.admin) {
     html += `
       <form method="POST" action="/logout" style="margin:0;">
@@ -200,7 +195,6 @@ app.get('/', (req, res) => {
 
   html += `</div></div>`;
 
-  /* ----------  КНОПКИ ПІД ШАПКОЮ (для адміна) ---------- */
   if (req.session.admin) {
     html += `
       <div class="action-buttons">
@@ -210,7 +204,6 @@ app.get('/', (req, res) => {
     `;
   }
 
-  /* ----------  ВИВІД ПОСТІВ ---------- */
   html += `<div class="container ${view === 'grid' ? 'posts-grid' : ''}">`;
 
   if (sortedPosts.length === 0) {
