@@ -20,13 +20,11 @@ app.use(session({
   saveUninitialized: false,
 }));
 
-// Папка для зберігання картинок
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Налаштування multer для завантаження файлів
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadDir);
@@ -38,36 +36,110 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Робимо папку 'public' статичною
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
-// Перевірка авторизації
 function isAdmin(req, res, next) {
   if (req.session && req.session.admin) next();
   else res.redirect('/login');
 }
 
-// Головна сторінка — показує пости з картинками
+// СТИЛІ ТА ВЕРСТКА УНІВЕРСАЛЬНІ
+const baseStyles = `
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #1f2a38;
+      color: #ffffff;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: flex-end;
+      padding: 15px;
+      background-color: #2d3e50;
+    }
+    button, .button-link {
+      background-color: #3f5e8c;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      text-decoration: none;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover, .button-link:hover {
+      background-color: #5a7ab0;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #d1d9e6;
+    }
+    .post {
+      background-color: #2e3b4e;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    .post h3 {
+      margin-top: 0;
+      color: #d1d9e6;
+    }
+    .post p {
+      color: #c0cad6;
+    }
+    .admin-controls {
+      margin-top: 10px;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      margin-top: 10px;
+      border-radius: 6px;
+    }
+    a {
+      color: #85b4ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      background-color: #3a4a5c;
+      color: white;
+    }
+    .add-button {
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+`;
+
 app.get('/', (req, res) => {
   let html = `
     <html>
       <head>
         <title>Фредлосграм</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          .header { display: flex; justify-content: flex-end; margin-bottom: 20px; }
-          button, a.button-link {
-            background-color: #007BFF; color: white; border: none; padding: 10px 15px;
-            text-decoration: none; cursor: pointer; border-radius: 4px;
-          }
-          .post { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
-          .admin-controls { margin-top: 10px; }
-          img { max-width: 300px; height: auto; display: block; margin-top: 10px; }
-        </style>
+        ${baseStyles}
       </head>
       <body>
-        <div class="header">`;
-
+        <div class="header">
+  `;
   if (req.session.admin) {
     html += `<form method="POST" action="/logout" style="margin:0;">
                <button type="submit">Вийти</button>
@@ -76,7 +148,7 @@ app.get('/', (req, res) => {
     html += `<a href="/login" class="button-link">Увійти</a>`;
   }
 
-  html += `</div><h1>Пости</h1>`;
+  html += `</div><div class="container"><h1>Пости</h1>`;
 
   if (posts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
@@ -100,27 +172,37 @@ app.get('/', (req, res) => {
   }
 
   if (req.session.admin) {
-    html += `<a href="/add"><button>Додати пост</button></a>`;
+    html += `<div class="add-button"><a href="/add" class="button-link">Додати пост</a></div>`;
   }
 
-  html += `</body></html>`;
+  html += `</div></body></html>`;
   res.send(html);
 });
 
-// Логін
 app.get('/login', (req, res) => {
   if (req.session.admin) return res.redirect('/');
   res.send(`
     <html>
-      <head><title>Увійти</title></head>
+      <head>
+        <title>Увійти</title>
+        ${baseStyles}
+      </head>
       <body>
-        <h2>Увійти як адмін</h2>
-        <form method="POST" action="/login">
-          Логін:<br><input name="login" required><br><br>
-          Пароль:<br><input type="password" name="password" required><br><br>
-          <button type="submit">Увійти</button>
-        </form>
-        <br><a href="/">Назад</a>
+        <div class="container">
+          <h2>Увійти як адмін</h2>
+          <form method="POST" action="/login">
+            <div class="form-group">
+              <input name="login" placeholder="Логін" required>
+            </div>
+            <div class="form-group">
+              <input type="password" name="password" placeholder="Пароль" required>
+            </div>
+            <button type="submit">Увійти</button>
+          </form>
+          <div class="add-button">
+            <a href="/" class="button-link">Назад</a>
+          </div>
+        </div>
       </body>
     </html>
   `);
@@ -136,33 +218,43 @@ app.post('/login', (req, res) => {
   }
 });
 
-// Логаут
 app.post('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
 });
 
-// Форма додавання поста (з картинкою)
 app.get('/add', isAdmin, (req, res) => {
   res.send(`
     <html>
-      <head><title>Додати пост</title></head>
+      <head>
+        <title>Додати пост</title>
+        ${baseStyles}
+      </head>
       <body>
-        <h2>Додати пост</h2>
-        <form method="POST" action="/add" enctype="multipart/form-data">
-          Заголовок:<br><input name="title" required><br><br>
-          Контент:<br><textarea name="content" rows="5" cols="30" required></textarea><br><br>
-          Картинка:<br><input type="file" name="image" accept="image/*" required><br><br>
-          <button type="submit">Додати</button>
-        </form>
-        <br><a href="/">Назад</a>
+        <div class="container">
+          <h2>Додати пост</h2>
+          <form method="POST" action="/add" enctype="multipart/form-data">
+            <div class="form-group">
+              <input name="title" placeholder="Заголовок" required>
+            </div>
+            <div class="form-group">
+              <textarea name="content" placeholder="Контент" rows="5" required></textarea>
+            </div>
+            <div class="form-group">
+              <input type="file" name="image" accept="image/*" required>
+            </div>
+            <button type="submit">Додати</button>
+          </form>
+          <div class="add-button">
+            <a href="/" class="button-link">Назад</a>
+          </div>
+        </div>
       </body>
     </html>
   `);
 });
 
-// Обробка додавання поста
 app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   const { title, content } = req.body;
   if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
@@ -171,7 +263,6 @@ app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   res.redirect('/');
 });
 
-// Форма редагування поста
 app.get('/edit/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
@@ -179,24 +270,39 @@ app.get('/edit/:id', isAdmin, (req, res) => {
   const post = posts[id];
   res.send(`
     <html>
-      <head><title>Редагувати пост</title></head>
+      <head>
+        <title>Редагувати пост</title>
+        ${baseStyles}
+      </head>
       <body>
-        <h2>Редагувати пост</h2>
-        <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
-          Заголовок:<br><input name="title" value="${post.title}" required><br><br>
-          Контент:<br><textarea name="content" rows="5" cols="30" required>${post.content}</textarea><br><br>
-          Поточна картинка:<br>
-          ${post.image ? `<img src="${post.image}" style="max-width:200px;"><br><br>` : 'Немає картинки<br><br>'}
-          Змінити картинку:<br><input type="file" name="image" accept="image/*"><br><br>
-          <button type="submit">Зберегти</button>
-        </form>
-        <br><a href="/">Назад</a>
+        <div class="container">
+          <h2>Редагувати пост</h2>
+          <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
+            <div class="form-group">
+              <input name="title" value="${post.title}" required>
+            </div>
+            <div class="form-group">
+              <textarea name="content" rows="5" required>${post.content}</textarea>
+            </div>
+            <div class="form-group">
+              Поточна картинка:<br>
+              ${post.image ? `<img src="${post.image}" style="max-width:100%; margin-top:10px;"><br>` : 'Немає картинки'}
+            </div>
+            <div class="form-group">
+              Змінити картинку:<br>
+              <input type="file" name="image" accept="image/*">
+            </div>
+            <button type="submit">Зберегти</button>
+          </form>
+          <div class="add-button">
+            <a href="/" class="button-link">Назад</a>
+          </div>
+        </div>
       </body>
     </html>
   `);
 });
 
-// Обробка редагування поста
 app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
@@ -205,24 +311,15 @@ app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
   posts[id].content = req.body.content;
 
   if (req.file) {
-    // Видаляємо стару картинку (необов’язково, можна залишити)
-    // fs.unlinkSync(path.join(__dirname, posts[id].image));
-
     posts[id].image = `/public/uploads/${req.file.filename}`;
   }
 
   res.redirect('/');
 });
 
-// Видалення поста
 app.get('/delete/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-
-  // Видалити картинку теж можна, якщо хочеш
-  // const imgPath = path.join(__dirname, posts[id].image);
-  // if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
-
   posts.splice(id, 1);
   res.redirect('/');
 });
