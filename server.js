@@ -105,14 +105,14 @@ const baseStyles = `
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
     }
-    /* ----------- БЛОК ДІЙ ПІД ШАПКОЮ ----------- */
+    /* ----------- БЛОК ДІЙ ----------- */
     .action-buttons {
       text-align: center;
       margin: 30px auto;
     }
     .action-buttons .button-link { margin: 0 6px; }
 
-    /* ----------- ПОСТ (звичайний список) ----------- */
+    /* ----------- ПОСТ (список) ----------- */
     .post {
       background-color: #2e3b4e;
       border-radius: 8px;
@@ -142,7 +142,7 @@ const baseStyles = `
     }
     .add-button { text-align: center; margin-top: 20px; }
 
-    /* ----------- ГРИД 2-В-РЯД (працює й на телефоні) ----------- */
+    /* ----------- ГРИД 2-В-РЯД ----------- */
     .posts-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -153,7 +153,7 @@ const baseStyles = `
       margin: 0;
     }
     .posts-grid .post h3 { font-size: 1em; text-align: center; }
-    .posts-grid .post p  { display: none; }      /* ховаємо підпис */
+    .posts-grid .post p  { display: none; }
     .posts-grid .post img{
       max-height: 160px;
       object-fit: cover;
@@ -161,11 +161,18 @@ const baseStyles = `
   </style>
 `;
 
-/* ----------  ГОЛОВНА  ---------- */
+/* ----------  ЗМІНА ВИГЛЯДУ (запис у сесію) ---------- */
+app.get('/view/:mode', isAdmin, (req, res) => {
+  const mode = req.params.mode === 'grid' ? 'grid' : 'list';
+  req.session.view = mode;
+  res.redirect('/');
+});
+
+/* ----------  ГОЛОВНА ---------- */
 app.get('/', (req, res) => {
-  const view        = req.query.view === 'grid' ? 'grid' : 'list';
+  const view        = req.session.view || 'list';
   const toggleLabel = view === 'grid' ? 'Список' : '2-в-ряд';
-  const toggleView  = view === 'grid' ? 'list' : 'grid';
+  const togglePath  = view === 'grid' ? '/view/list' : '/view/grid';
 
   const sortedPosts = [...posts].sort(
     (a, b) => (a.order ?? 1e9) - (b.order ?? 1e9)
@@ -198,7 +205,7 @@ app.get('/', (req, res) => {
   if (req.session.admin) {
     html += `
       <div class="action-buttons">
-        <a href="/?view=${toggleView}" class="button-link">${toggleLabel}</a>
+        <a href="${togglePath}" class="button-link">${toggleLabel}</a>
         <a href="/add" class="button-link">Додати пост</a>
       </div>
     `;
@@ -250,7 +257,9 @@ app.get('/login', (req, res) => {
 app.post('/login', (req, res) => {
   const { login, password } = req.body;
   if (login === ADMIN_LOGIN && password === ADMIN_PASS) {
-    req.session.admin = true; res.redirect('/');
+    req.session.admin = true;
+    req.session.view = 'list';
+    res.redirect('/');
   } else {
     res.send('Невірний логін або пароль. <a href="/login">Спробуйте знову</a>');
   }
