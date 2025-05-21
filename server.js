@@ -74,8 +74,8 @@ const baseStyles = `
       display: flex;
       align-items: center;
       padding: 15px;
-      background-color: #30445c;       /* трохи інший колір */
-      margin-bottom: 25px;             /* відступ від першого поста */
+      background-color: #30445c;
+      margin-bottom: 25px;
       position: relative;
     }
     .header-title {
@@ -87,7 +87,7 @@ const baseStyles = `
       white-space: nowrap;
     }
     .header-buttons {
-      margin-left: auto;               /* кнопки праворуч */
+      margin-left: auto;
       display: flex;
       gap: 10px;
     }
@@ -105,11 +105,7 @@ const baseStyles = `
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
     }
-    /* ----------- ТЕКСТ І ПОСТИ ----------- */
-    h1, h2 {
-      text-align: center;
-      color: #d1d9e6;
-    }
+    /* ----------- ПОСТИ (List) ----------- */
     .post {
       background-color: #2e3b4e;
       border-radius: 8px;
@@ -132,7 +128,7 @@ const baseStyles = `
     a { color: #85b4ff; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .form-group { margin-bottom: 15px; }
-    input[type="text"], input[type="password"], textarea {
+    input[type="text"], input[type="password"], input[type="number"], textarea {
       width: 100%;
       padding: 10px;
       border: none;
@@ -141,11 +137,41 @@ const baseStyles = `
       color: white;
     }
     .add-button { text-align: center; margin-top: 20px; }
+
+    /* ----------- ГРИД 2-В-РЯД ----------- */
+    .posts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    .posts-grid .post {
+      margin-bottom: 0;
+      padding: 10px;
+    }
+    .posts-grid .post h3 {
+      font-size: 1em;
+      text-align: center;
+    }
+    .posts-grid .post p { display: none; } /* ховаємо підпис */
+    @media (max-width: 500px) {
+      .posts-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 `;
 
 /* ----------  ГОЛОВНА  ---------- */
 app.get('/', (req, res) => {
+  const view = req.query.view === 'grid' ? 'grid' : 'list';
+  const toggleLabel = view === 'grid' ? 'Список' : '2-в-ряд';
+  const toggleView = view === 'grid' ? 'list' : 'grid';
+
+  // сортуємо за order (якщо немає — дуже велике число)
+  const sortedPosts = [...posts].sort((a, b) =>
+    (a.order ?? 1e9) - (b.order ?? 1e9)
+  );
+
   let html = `
     <html>
       <head>
@@ -156,6 +182,7 @@ app.get('/', (req, res) => {
         <div class="header">
           <div class="header-title">Фредлосграм</div>
           <div class="header-buttons">
+            <a href="/?view=${toggleView}" class="button-link">${toggleLabel}</a>
   `;
 
   if (req.session.admin) {
@@ -172,17 +199,18 @@ app.get('/', (req, res) => {
   html += `
           </div>
         </div>
-        <div class="container">
+        <div class="container ${view === 'grid' ? 'posts-grid' : ''}">
   `;
 
-  if (posts.length === 0) {
+  if (sortedPosts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
   } else {
-    posts.forEach((post, i) => {
+    sortedPosts.forEach(post => {
+      const i = posts.indexOf(post); // потрібний індекс для edit/delete
       html += `<div class="post">
         <h3>${post.title}</h3>
-        <p>${post.content}</p>`;
-      if (post.image) html += `<img src="${post.image}" alt="Image for post">`;
+        <img src="${post.image}" alt="Image for post">`;
+      if (view === 'list') html += `<p>${post.content}</p>`;
       if (req.session.admin) {
         html += `
           <div class="admin-controls">
@@ -259,6 +287,9 @@ app.get('/add', isAdmin, (_, res) => {
               <textarea name="content" placeholder="Контент" rows="5" required></textarea>
             </div>
             <div class="form-group">
+              <input type="number" name="order" placeholder="Позиція (1,2,3…)" min="1" required>
+            </div>
+            <div class="form-group">
               <input type="file" name="image" accept="image/*" required>
             </div>
             <button type="submit">Додати</button>
@@ -272,9 +303,14 @@ app.get('/add', isAdmin, (_, res) => {
   `);
 });
 app.post('/add', isAdmin, upload.single('image'), (req, res) => {
-  const { title, content } = req.body;
+  const { title, content, order } = req.body;
   if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
-  posts.push({ title, content, image: `/public/uploads/${req.file.filename}` });
+  posts.push({
+    title,
+    content,
+    order: parseInt(order, 10),
+    image: `/public/uploads/${req.file.filename}`
+  });
   savePosts();
   res.redirect('/');
 });
@@ -301,6 +337,9 @@ app.get('/edit/:id', isAdmin, (req, res) => {
               <textarea name="content" rows="5" required>${post.content}</textarea>
             </div>
             <div class="form-group">
+              <input type="number" name="order" value="${post.order ?? ''}" min="1" required>
+            </div>
+            <div class="form-group">
               Поточна картинка:<br>
               ${post.image ? `<img src="${post.image}" style="max-width:100%; margin-top:10px;"><br>` : 'Немає картинки'}
             </div>
@@ -323,6 +362,7 @@ app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
   posts[id].title = req.body.title;
   posts[id].content = req.body.content;
+  posts[id].order = parseInt(req.body.order, 10);
   if (req.file) posts[id].image = `/public/uploads/${req.file.filename}`;
   savePosts();
   res.redirect('/');
