@@ -65,7 +65,7 @@ const baseStyles = `
       color: #ffffff;
     }
     .container {
-      max-width: 600px;
+      max-width: 960px;      /* ширше, щоб 2-в-ряд помістились */
       margin: auto;
       padding: 20px;
     }
@@ -105,14 +105,13 @@ const baseStyles = `
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
     }
-    /* ----------- БЛОК ДІЙ ----------- */
+    /* ----------- БЛОК ДІЙ ПІД ШАПКОЮ ----------- */
     .action-buttons {
       text-align: center;
-      margin: 0 auto 20px;
+      margin: 25px auto;   /* більший відступ під шапкою */
     }
-    .action-buttons .button-link {
-      margin: 0 5px;
-    }
+    .action-buttons .button-link { margin: 0 6px; }
+
     /* ----------- ПОСТИ (List) ----------- */
     .post {
       background-color: #2e3b4e;
@@ -121,12 +120,9 @@ const baseStyles = `
       margin-bottom: 20px;
       box-shadow: 0 0 10px rgba(0,0,0,0.2);
     }
-    .post h3 {
-      margin-top: 0;
-      color: #d1d9e6;
-    }
-    .post p { color: #c0cad6; }
-    .admin-controls { margin-top: 10px; }
+    .post h3       { margin-top: 0; color: #d1d9e6; }
+    .post p        { color: #c0cad6; }
+    .admin-controls{ margin-top: 10px; }
     img {
       max-width: 100%;
       height: auto;
@@ -156,15 +152,10 @@ const baseStyles = `
       margin-bottom: 0;
       padding: 10px;
     }
-    .posts-grid .post h3 {
-      font-size: 1em;
-      text-align: center;
-    }
-    .posts-grid .post p { display: none; } /* ховаємо підпис */
-    @media (max-width: 500px) {
-      .posts-grid {
-        grid-template-columns: 1fr;
-      }
+    .posts-grid .post h3 { font-size: 1em; text-align: center; }
+    .posts-grid .post p  { display: none; } /* ховаємо підпис */
+    @media (max-width: 700px) {
+      .posts-grid { grid-template-columns: 1fr; }
     }
   </style>
 `;
@@ -173,11 +164,11 @@ const baseStyles = `
 app.get('/', (req, res) => {
   const view = req.query.view === 'grid' ? 'grid' : 'list';
   const toggleLabel = view === 'grid' ? 'Список' : '2-в-ряд';
-  const toggleView = view === 'grid' ? 'list' : 'grid';
+  const toggleView  = view === 'grid' ? 'list' : 'grid';
 
-  // сортуємо за order (якщо немає — дуже велике число)
-  const sortedPosts = [...posts].sort((a, b) =>
-    (a.order ?? 1e9) - (b.order ?? 1e9)
+  /* сортування за order */
+  const sortedPosts = [...posts].sort(
+    (a, b) => (a.order ?? 1e9) - (b.order ?? 1e9)
   );
 
   let html = `
@@ -203,12 +194,9 @@ app.get('/', (req, res) => {
     html += `<a href="/login" class="button-link">Увійти</a>`;
   }
 
-  html += `
-          </div>
-        </div>
-  `;
+  html += `</div></div>`;
 
-  /* ----------  КНОПКИ НИЖЧЕ ШАПКИ (тільки для адміна)  ---------- */
+  /* ----------  КНОПКИ ПІД ШАПКОЮ (тільки для адміна)  ---------- */
   if (req.session.admin) {
     html += `
       <div class="action-buttons">
@@ -218,26 +206,26 @@ app.get('/', (req, res) => {
     `;
   }
 
-  /* ----------  СПИСОК/ГРИД ПОСТІВ  ---------- */
+  /* ----------  ВИВІД ПОСТІВ  ---------- */
   html += `<div class="container ${view === 'grid' ? 'posts-grid' : ''}">`;
 
   if (sortedPosts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
   } else {
     sortedPosts.forEach(post => {
-      const i = posts.indexOf(post); // потрібний індекс для edit/delete
-      html += `<div class="post">
-        <h3>${post.title}</h3>
-        <img src="${post.image}" alt="Image for post">`;
-      if (view === 'list') html += `<p>${post.content}</p>`;
-      if (req.session.admin) {
-        html += `
-          <div class="admin-controls">
-            <a href="/edit/${i}">Редагувати</a> |
-            <a href="/delete/${i}" onclick="return confirm('Видалити цей пост?')">Видалити</a>
-          </div>`;
-      }
-      html += `</div>`;
+      const idx = posts.indexOf(post);
+      html += `
+        <div class="post">
+          <h3>${post.title}</h3>
+          <img src="${post.image}" alt="Image for post">
+          ${view === 'list' ? `<p>${post.content}</p>` : ''}
+          ${req.session.admin ? `
+            <div class="admin-controls">
+              <a href="/edit/${idx}">Редагувати</a> |
+              <a href="/delete/${idx}" onclick="return confirm('Видалити цей пост?')">Видалити</a>
+            </div>` : ''}
+        </div>
+      `;
     });
   }
 
@@ -245,7 +233,7 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-/* ----------  ЛОГІН-СТОРІНКА  ---------- */
+/* ----------  ЛОГІН  ---------- */
 app.get('/login', (req, res) => {
   if (req.session.admin) return res.redirect('/');
   res.send(`
@@ -287,7 +275,7 @@ app.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/'));
 });
 
-/* ----------  ДОДАВАННЯ ПОСТУ  ---------- */
+/* ----------  ДОДАТИ ПОСТ  ---------- */
 app.get('/add', isAdmin, (_, res) => {
   res.send(`
     <html>
@@ -334,7 +322,7 @@ app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   res.redirect('/');
 });
 
-/* ----------  РЕДАГУВАННЯ ПОСТУ  ---------- */
+/* ----------  РЕДАГУВАТИ ПОСТ  ---------- */
 app.get('/edit/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
@@ -379,15 +367,15 @@ app.get('/edit/:id', isAdmin, (req, res) => {
 app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-  posts[id].title = req.body.title;
+  posts[id].title   = req.body.title;
   posts[id].content = req.body.content;
-  posts[id].order = parseInt(req.body.order, 10);
+  posts[id].order   = parseInt(req.body.order, 10);
   if (req.file) posts[id].image = `/public/uploads/${req.file.filename}`;
   savePosts();
   res.redirect('/');
 });
 
-/* ----------  ВИДАЛЕННЯ ПОСТУ  ---------- */
+/* ----------  ВИДАЛИТИ ПОСТ  ---------- */
 app.get('/delete/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
