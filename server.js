@@ -8,7 +8,14 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const DATA_PATH = path.join(__dirname, 'data');
+const POSTS_FILE = path.join(DATA_PATH, 'posts.json');
+if (!fs.existsSync(DATA_PATH)) fs.mkdirSync(DATA_PATH);
+
 let posts = [];
+if (fs.existsSync(POSTS_FILE)) {
+  posts = JSON.parse(fs.readFileSync(POSTS_FILE, 'utf-8'));
+}
 
 const ADMIN_LOGIN = 'admin';
 const ADMIN_PASS = '1234';
@@ -43,7 +50,10 @@ function isAdmin(req, res, next) {
   else res.redirect('/login');
 }
 
-// СТИЛІ ТА ВЕРСТКА УНІВЕРСАЛЬНІ
+function savePosts() {
+  fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
+}
+
 const baseStyles = `
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
@@ -61,9 +71,21 @@ const baseStyles = `
     }
     .header {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
       padding: 15px;
       background-color: #2d3e50;
+      flex-wrap: wrap;
+    }
+    .header-title {
+      flex: 1;
+      text-align: center;
+      font-size: 1.5em;
+      color: #d1d9e6;
+    }
+    .header-buttons {
+      display: flex;
+      gap: 10px;
     }
     button, .button-link {
       background-color: #3f5e8c;
@@ -139,16 +161,21 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="header">
+          <div class="header-buttons">
   `;
+
   if (req.session.admin) {
-    html += `<form method="POST" action="/logout" style="margin:0;">
-               <button type="submit">Вийти</button>
-             </form>`;
+    html += `
+      <form method="POST" action="/logout" style="margin:0;">
+        <button type="submit">Вийти</button>
+      </form>
+      <a href="/add" class="button-link">Додати пост</a>
+    `;
   } else {
     html += `<a href="/login" class="button-link">Увійти</a>`;
   }
 
-  html += `</div><div class="container"><h1>ФРЕДЛОСГРАМ</h1>`;
+  html += `</div><div class="header-title">Фредлосграм</div></div><div class="container"><h1>Пости</h1>`;
 
   if (posts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
@@ -171,10 +198,6 @@ app.get('/', (req, res) => {
     });
   }
 
-  if (req.session.admin) {
-    html += `<div class="add-button"><a href="/add" class="button-link">Додати пост</a></div>`;
-  }
-
   html += `</div></body></html>`;
   res.send(html);
 });
@@ -192,7 +215,7 @@ app.get('/login', (req, res) => {
           <h2>Увійти як адмін</h2>
           <form method="POST" action="/login">
             <div class="form-group">
-              <input name="login" placeholder="Логін" required>
+              <input type="text" name="login" placeholder="Логін" required>
             </div>
             <div class="form-group">
               <input type="password" name="password" placeholder="Пароль" required>
@@ -260,6 +283,7 @@ app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
   const imagePath = `/public/uploads/${req.file.filename}`;
   posts.push({ title, content, image: imagePath });
+  savePosts();
   res.redirect('/');
 });
 
@@ -314,6 +338,7 @@ app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
     posts[id].image = `/public/uploads/${req.file.filename}`;
   }
 
+  savePosts();
   res.redirect('/');
 });
 
@@ -321,10 +346,10 @@ app.get('/delete/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
   posts.splice(id, 1);
+  savePosts();
   res.redirect('/');
 });
 
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
 });
-
