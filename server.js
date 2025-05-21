@@ -8,6 +8,7 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+/* ----------  ЗБЕРІГАННЯ ПОСТІВ У ФАЙЛІ  ---------- */
 const DATA_PATH = path.join(__dirname, 'data');
 const POSTS_FILE = path.join(DATA_PATH, 'posts.json');
 if (!fs.existsSync(DATA_PATH)) fs.mkdirSync(DATA_PATH);
@@ -16,10 +17,15 @@ let posts = [];
 if (fs.existsSync(POSTS_FILE)) {
   posts = JSON.parse(fs.readFileSync(POSTS_FILE, 'utf-8'));
 }
+function savePosts() {
+  fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
+}
 
+/* ----------  КОНСТАНТИ ДЛЯ АДМІНА  ---------- */
 const ADMIN_LOGIN = 'admin';
 const ADMIN_PASS = '1234';
 
+/* ----------  МІДЛВЕРИ  ---------- */
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
   secret: 'simple-secret',
@@ -27,33 +33,27 @@ app.use(session({
   saveUninitialized: false,
 }));
 
+/* ----------  НАЛАШТУВАННЯ MULTER  ---------- */
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    cb(null, Date.now() + ext);
-  }
+  destination: (_, __, cb) => cb(null, uploadDir),
+  filename: (_, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
+/* ----------  СТАТИКА  ---------- */
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
+/* ----------  ХЕЛПЕР ДЛЯ ПЕРЕВІРКИ АДМІНА  ---------- */
 function isAdmin(req, res, next) {
-  if (req.session && req.session.admin) next();
-  else res.redirect('/login');
+  if (req.session && req.session.admin) return next();
+  res.redirect('/login');
 }
 
-function savePosts() {
-  fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
-}
-
+/* ----------  БАЗОВІ СТИЛІ  ---------- */
 const baseStyles = `
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
@@ -69,24 +69,29 @@ const baseStyles = `
       margin: auto;
       padding: 20px;
     }
+    /* ----------- ШАПКА ----------- */
     .header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
       padding: 15px;
-      background-color: #2d3e50;
-      flex-wrap: wrap;
+      background-color: #30445c;       /* трохи інший колір */
+      margin-bottom: 25px;             /* відступ від першого поста */
+      position: relative;
     }
     .header-title {
-      flex: 1;
-      text-align: center;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
       font-size: 1.5em;
       color: #d1d9e6;
+      white-space: nowrap;
     }
     .header-buttons {
+      margin-left: auto;               /* кнопки праворуч */
       display: flex;
       gap: 10px;
     }
+    /* ----------- КНОПКИ ----------- */
     button, .button-link {
       background-color: #3f5e8c;
       color: white;
@@ -100,6 +105,7 @@ const baseStyles = `
     button:hover, .button-link:hover {
       background-color: #5a7ab0;
     }
+    /* ----------- ТЕКСТ І ПОСТИ ----------- */
     h1, h2 {
       text-align: center;
       color: #d1d9e6;
@@ -115,28 +121,17 @@ const baseStyles = `
       margin-top: 0;
       color: #d1d9e6;
     }
-    .post p {
-      color: #c0cad6;
-    }
-    .admin-controls {
-      margin-top: 10px;
-    }
+    .post p { color: #c0cad6; }
+    .admin-controls { margin-top: 10px; }
     img {
       max-width: 100%;
       height: auto;
       margin-top: 10px;
       border-radius: 6px;
     }
-    a {
-      color: #85b4ff;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    .form-group {
-      margin-bottom: 15px;
-    }
+    a { color: #85b4ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .form-group { margin-bottom: 15px; }
     input[type="text"], input[type="password"], textarea {
       width: 100%;
       padding: 10px;
@@ -145,13 +140,11 @@ const baseStyles = `
       background-color: #3a4a5c;
       color: white;
     }
-    .add-button {
-      text-align: center;
-      margin-top: 20px;
-    }
+    .add-button { text-align: center; margin-top: 20px; }
   </style>
 `;
 
+/* ----------  ГОЛОВНА  ---------- */
 app.get('/', (req, res) => {
   let html = `
     <html>
@@ -161,6 +154,7 @@ app.get('/', (req, res) => {
       </head>
       <body>
         <div class="header">
+          <div class="header-title">Фредлосграм</div>
           <div class="header-buttons">
   `;
 
@@ -175,7 +169,12 @@ app.get('/', (req, res) => {
     html += `<a href="/login" class="button-link">Увійти</a>`;
   }
 
-  html += `</div><div class="header-title">Фредлосграм</div>`;
+  html += `
+          </div>
+        </div>
+        <div class="container">
+          <h1>Пости</h1>
+  `;
 
   if (posts.length === 0) {
     html += `<p>Постів поки що немає.</p>`;
@@ -184,9 +183,7 @@ app.get('/', (req, res) => {
       html += `<div class="post">
         <h3>${post.title}</h3>
         <p>${post.content}</p>`;
-      if (post.image) {
-        html += `<img src="${post.image}" alt="Image for post">`;
-      }
+      if (post.image) html += `<img src="${post.image}" alt="Image for post">`;
       if (req.session.admin) {
         html += `
           <div class="admin-controls">
@@ -202,6 +199,7 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
+/* ----------  ЛОГІН-СТОРІНКА  ---------- */
 app.get('/login', (req, res) => {
   if (req.session.admin) return res.redirect('/');
   res.send(`
@@ -230,7 +228,6 @@ app.get('/login', (req, res) => {
     </html>
   `);
 });
-
 app.post('/login', (req, res) => {
   const { login, password } = req.body;
   if (login === ADMIN_LOGIN && password === ADMIN_PASS) {
@@ -240,14 +237,12 @@ app.post('/login', (req, res) => {
     res.send('Невірний логін або пароль. <a href="/login">Спробуйте знову</a>');
   }
 });
-
 app.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.redirect('/');
-  });
+  req.session.destroy(() => res.redirect('/'));
 });
 
-app.get('/add', isAdmin, (req, res) => {
+/* ----------  ДОДАВАННЯ ПОСТУ  ---------- */
+app.get('/add', isAdmin, (_, res) => {
   res.send(`
     <html>
       <head>
@@ -277,20 +272,18 @@ app.get('/add', isAdmin, (req, res) => {
     </html>
   `);
 });
-
 app.post('/add', isAdmin, upload.single('image'), (req, res) => {
   const { title, content } = req.body;
   if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
-  const imagePath = `/public/uploads/${req.file.filename}`;
-  posts.push({ title, content, image: imagePath });
+  posts.push({ title, content, image: `/public/uploads/${req.file.filename}` });
   savePosts();
   res.redirect('/');
 });
 
+/* ----------  РЕДАГУВАННЯ ПОСТУ  ---------- */
 app.get('/edit/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-
   const post = posts[id];
   res.send(`
     <html>
@@ -326,22 +319,17 @@ app.get('/edit/:id', isAdmin, (req, res) => {
     </html>
   `);
 });
-
 app.post('/edit/:id', isAdmin, upload.single('image'), (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
-
   posts[id].title = req.body.title;
   posts[id].content = req.body.content;
-
-  if (req.file) {
-    posts[id].image = `/public/uploads/${req.file.filename}`;
-  }
-
+  if (req.file) posts[id].image = `/public/uploads/${req.file.filename}`;
   savePosts();
   res.redirect('/');
 });
 
+/* ----------  ВИДАЛЕННЯ ПОСТУ  ---------- */
 app.get('/delete/:id', isAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
@@ -350,6 +338,5 @@ app.get('/delete/:id', isAdmin, (req, res) => {
   res.redirect('/');
 });
 
-app.listen(PORT, () => {
-  console.log(`Server started on port ${PORT}`);
-});
+/* ----------  СТАРТ СЕРВЕРА  ---------- */
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
