@@ -41,12 +41,12 @@ const dict={
      wrong:'Невірний логін або пароль',back:'Назад',edit:'Редагувати',remove:'Видалити',conf:'Видалити цей пост?',
      commentPl:'Коментар...',send:'Надіслати',settings:'Налаштування',save:'Зберегти',lang:'EN',
      search:'Пошук...',likes:'Лайки',delCommentConf:'Видалити цей коментар?',namePrompt:'Введіть ваше ім\'я',
-     showComments:'Показати коментарі',hideComments:'Сховати коментарі',nameReq:'Введіть ім\'я!'},
+     showComments:'Показати коментарі',hideComments:'Сховати коментарі'},
  en:{title:'Fredllosgram',add:'Add post',deleteAll:'Delete all',logout:'Logout',login:'Login',
      wrong:'Invalid login or password',back:'Back',edit:'Edit',remove:'Delete',conf:'Delete this post?',
      commentPl:'Comment...',send:'Send',settings:'Settings',save:'Save',lang:'UA',
      search:'Search...',likes:'Likes',delCommentConf:'Delete this comment?',namePrompt:'Enter your name',
-     showComments:'Show comments',hideComments:'Hide comments',nameReq:'Enter name!'}
+     showComments:'Show comments',hideComments:'Hide comments'}
 };
 const t=(req,k)=>dict[req.session.lang||'ua'][k];
 const isAdmin=(req,res,next)=>req.session?.admin?next():res.redirect('/');
@@ -69,33 +69,15 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .post h3{margin:0 0 10px;color:#d1d9e6}.meta{display:flex;justify-content:space-between;font-size:.85em;color:#9ba8b8;margin-top:8px}
  img{max-width:100%;border-radius:6px;cursor:pointer;margin-bottom:10px}
  .comment-admin{margin-left:8px;color:#f66;cursor:pointer}
- .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);justify-content:center;align-items:center}
- .modal img{max-height:90%;max-width:90%}
- .comments-block{display:none;margin-top:10px;}
+ details summary{cursor:pointer; font-weight:bold; margin-bottom:10px; color:#85b4ff;}
+ details[open] summary::after {content:" ▲";} 
+ details summary::after {content:" ▼";}
+ .comments-block p{margin:4px 0;}
 </style>
 <script>
- function sh(i){document.getElementById('m'+i).style.display='flex'}
- function hi(i){document.getElementById('m'+i).style.display='none'}
- function toggleComments(id) {
-   const block = document.getElementById('comments-block-' + id);
-   const btn = document.getElementById('comments-btn-' + id);
-   if (block.style.display === 'block') {
-     block.style.display = 'none';
-     btn.textContent = '${dict.ua.showComments}';
-   } else {
-     block.style.display = 'block';
-     btn.textContent = '${dict.ua.hideComments}';
-   }
- }
- function submitComment(f) {
-   const nameInput = f.querySelector('input[name="name"]');
-   if (!nameInput.value.trim()) {
-     alert('${dict.ua.nameReq}');
-     nameInput.focus();
-     return false;
-   }
-   return true;
- }
+ function submitComment(f){return true} // без prompt, ім'я вводиться у формі
+ function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
+ function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
 </script>
 </head><body>
 <div class="header">
@@ -103,7 +85,7 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
   <div class="header-title">${t(req,'title')}</div>
   <div class="header-buttons">
    ${req.session.admin?`<a href="/add" class="btn">${t(req,'add')}</a>
-    <button class="btn" onclick="if(confirm('${t(req,'conf')}'))location='/deleteAll'">${t(req,'deleteAll')}</button>
+    <button class="btn" onclick="delAll()">${t(req,'deleteAll')}</button>
     <a href="/logout" class="btn">${t(req,'logout')}</a>`:
     `<a href="/login" class="btn">${t(req,'login')}</a>`}
   </div>
@@ -124,17 +106,17 @@ app.get('/',(req,res)=>{
     ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
     <div class="meta"><span>${date}</span></div>
     <p>${esc(p.body)}</p>
-    <button id="comments-btn-${p.id}" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
-    <div id="comments-block-${p.id}" class="comments-block">
-      ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?` <span class="comment-admin" onclick="if(confirm('${t(req,'delCommentConf')}'))fetch('/comment/delete/${p.id}/${j}',{method:'POST'}).then(()=>location.reload())">×</span>`:''}</p>`).join('')}
-      <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
-        <input name="name" placeholder="${t(req,'namePrompt')}" required autocomplete="off">
-        <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
-        <button>${t(req,'send')}</button>
-      </form>
-    </div>
-    ${req.session.admin?`<div><a href="/edit/${p.id}">${t(req,'edit')}</a> | <a href="/delete/${p.id}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a></div>`:''}
-    <div id="m${i}" class="modal" onclick="hi(${i})"><img src="/public/uploads/${esc(p.img)}"></div>
+    <details>
+      <summary>${t(req,'showComments')}</summary>
+      <div class="comments-block">
+        ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?` <span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
+        <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
+          <input name="name" placeholder="${t(req,'namePrompt')}" required autocomplete="off">
+          <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
+          <button>${t(req,'send')}</button>
+        </form>
+      </div>
+    </details>
   </div>`;}).join('');
  res.send(page(req,`
  <form method="GET" style="margin-bottom:20px"><input type="search" name="search" placeholder="${t(req,'search')}" value="${esc(req.query.search||'')}">
@@ -156,7 +138,6 @@ app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
 app.get('/add',isAdmin,(req,res)=>res.send(page(req,`<form method="POST" action="/add" enctype="multipart/form-data" style="max-width:600px;margin:auto">
  <input name="title" placeholder="Title" required><textarea name="body" placeholder="Content" rows="5" required></textarea>
  <input type="file" name="img" accept="image/*"><button>${t(req,'add')}</button></form>`,' - Add')));
-
 app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
  const id=posts.length?Math.max(...posts.map(p=>p.id))+1:1;
  posts.unshift({id,title:req.body.title,body:req.body.body,img:req.file?req.file.filename:'',date:Date.now(),likes:0,comments:[]});
@@ -170,7 +151,6 @@ app.get('/edit/:id',isAdmin,(req,res)=>{const p=posts.find(x=>x.id==req.params.i
  <input type="file" name="img" accept="image/*"><br>
  <label>Date:<input type="datetime-local" name="date" value="${new Date(p.date).toISOString().slice(0,16)}"></label><br><br>
  <button>${t(req,'save')}</button></form>`,' - Edit'));});
-
 app.post('/edit/:id',isAdmin,upload.single('img'),(req,res)=>{
  const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
  p.title=req.body.title;p.body=req.body.body;if(req.file){if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}p.img=req.file.filename;}
@@ -182,14 +162,8 @@ app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlin
 
 app.post('/comment/:id',(req,res)=>{
  const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- const name=req.body.name?esc(req.body.name.trim()):'Anon';
- const body=req.body.comment?esc(req.body.comment.trim()):'';
- if(body && name) {
-   p.comments=p.comments||[];
-   p.comments.push({name,body});
-   savePosts(posts);
- }
- res.redirect('/');
+ const name=req.body.name?esc(req.body.name.trim()):'Anon';const body=req.body.comment?esc(req.body.comment.trim()):'';
+ if(body && name){p.comments=p.comments||[];p.comments.push({name,body});savePosts(posts);}res.redirect('/');
 });
 app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
  const p=posts.find(x=>x.id==req.params.pid);if(!p)return res.sendStatus(404);
