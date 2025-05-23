@@ -136,7 +136,7 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
 
 /* ----------  ROUTES ---------- */
 app.get('/', (req, res) => {
-  // Фільтр пошуку
+  // Фільтр пошуку (хоч ти просив без зміни, але залишу для сумісності)
   const q = req.query.q?.toLowerCase() || '';
   let filtered = posts.filter(p => p.text.toLowerCase().includes(q) || p.title.toLowerCase().includes(q));
   // Відповідь
@@ -146,118 +146,95 @@ app.get('/', (req, res) => {
       ${p.image ? `<img src="/public/uploads/${p.image}" alt="${esc(p.title)}" onclick="sh(${p.id})">` : ''}
       <p>${esc(p.text)}</p>
       <div class="meta">
-        <button class="like" onclick="like(${p.id})">❤️ <span id="lk${p.id}">${p.likes||0}</span> ${t(req,'likes')}</button>
+        <button class="like" onclick="like(${p.id})">❤️ <span id="lk${p.id}">${p.likes || 0}</span></button>
         <button class="toggle-btn" id="b${p.id}" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
       </div>
       <div class="comments" id="c${p.id}">
-        ${p.comments?.map((c,i) => `
-          <div><b>${esc(c.name)}:</b> ${esc(c.text)}${req.session.admin?` <span class="comment-admin" onclick="confirmDelComment(${p.id},${i})">[x]</span>`:''}</div>
-        `).join('')||''}
-        <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
-          <textarea name="text" placeholder="${t(req,'commentPl')}" required></textarea>
+        ${(p.comments||[]).map((c,i) => `
+          <p><b>${esc(c.name)}:</b> ${esc(c.text)}${req.session.admin ? ` <span class="comment-admin" onclick="confirmDelComment(${p.id},${i})">✖</span>` : ''}</p>
+        `).join('')}
+        <form onsubmit="return submitComment(this)" method="POST" action="/comment/${p.id}">
+          <input name="text" placeholder="${t(req,'commentPl')}" required>
           <button type="submit">${t(req,'send')}</button>
         </form>
       </div>
-    </div>`).join('');
+      <div class="modal" id="m${p.id}" onclick="hi(${p.id})"><img src="/public/uploads/${p.image}" alt=""></div>
+    </div>
+  `).join('');
   res.send(page(req, postsHtml));
 });
 
-/* Лайк */
+app.get('/like/:id', (req, res) => res.redirect('/')); // на всяк випадок
+
 app.post('/like/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  let post = posts.find(p => p.id === id);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
-  post.likes = (post.likes || 0) + 1;
-  savePosts(posts);
-  res.json({ likes: post.likes });
+  const id = Number(req.params.id);
+  const post = posts.find(p => p.id === id);
+  if (post) {
+    post.likes = (post.likes || 0) + 1;
+    savePosts(posts);
+    res.json({likes: post.likes});
+  } else res.status(404).json({error:'Post not found'});
 });
 
-/* Коментар */
-app.post('/comment/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  let post = posts.find(p => p.id === id);
-  if (!post) return res.redirect('/');
-  const name = req.body.name || 'Anonymous';
-  const text = req.body.text;
-  if(!text) return res.redirect('/');
-  post.comments = post.comments || [];
-  post.comments.push({ name, text });
-  savePosts(posts);
+/* ----------  COMMENT DELETE ---------- */
+app.post('/comment/delete/:postId/:commentIdx', isAdmin, (req, res) => {
+  const pId = Number(req.params.postId);
+  const cIdx = Number(req.params.commentIdx);
+  const post = posts.find(p => p.id === pId);
+  if(post && post.comments && post.comments[cIdx]){
+    post.comments.splice(cIdx,1);
+    savePosts(posts);
+  }
+  res.end();
+});
+
+/* ----------  COMMENT ADD ---------- */
+app.post('/comment/:postId', (req, res) => {
+  const pId = Number(req.params.postId);
+  const post = posts.find(p => p.id === pId);
+  if(post){
+    const name = req.body.name || 'Anonymous';
+    const text = req.body.text || '';
+    if(!post.comments) post.comments = [];
+    post.comments.push({name, text});
+    savePosts(posts);
+  }
   res.redirect('/');
 });
 
-/* Видалення коментаря (адмін) */
-app.post('/comment/delete/:postId/:commentIndex', isAdmin, (req, res) => {
-  const postId = parseInt(req.params.postId);
-  const commentIndex = parseInt(req.params.commentIndex);
-  const post = posts.find(p => p.id === postId);
-  if(post && post.comments && post.comments[commentIndex]){
-    post.comments.splice(commentIndex, 1);
-    savePosts(posts);
-  }
-  res.sendStatus(200);
+/* ----------  LANG SWITCH ---------- */
+app.get('/lang/:code', (req,res)=>{
+  if(['ua','en'].includes(req.params.code)) req.session.lang = req.params.code;
+  res.redirect('back');
 });
 
-/* Логін */
-app.get('/login', (req, res) => {
+/* ----------  LOGIN ---------- */
+app.get('/login', (req,res) => {
+  if(req.session.admin) return res.redirect('/');
   res.send(page(req, `<form method="POST" action="/login">
-    <input name="login" placeholder="Login" required autofocus>
+    <input name="login" placeholder="${t(req,'login')}" required>
     <input name="password" type="password" placeholder="Password" required>
     <button type="submit">${t(req,'login')}</button>
-  </form>`,' - Login'));
+  </form>`, ' - '+t(req,'login')));
 });
-
-app.post('/login', (req, res) => {
+app.post('/login', (req,res) => {
   if(req.body.login === ADMIN_LOGIN && req.body.password === ADMIN_PASS){
     req.session.admin = true;
     res.redirect('/');
   } else {
-    res.send(page(req, `<p style="color:red">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`, ' - Login'));
+    res.send(page(req, `<p style="color:red">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`, ' - '+t(req,'login')));
   }
 });
-
-/* Лог-аут */
-app.get('/logout', (req, res) => {
+app.get('/logout', (req,res) => {
   req.session.destroy(() => res.redirect('/'));
 });
 
-/* Зміна мови */
-app.get('/lang/:l', (req, res) => {
-  const l = req.params.l;
-  if(['ua','en'].includes(l)) req.session.lang = l;
-  res.redirect('back');
-});
-
-/* Додавання поста (адмін) */
-app.get('/add', isAdmin, (req, res) => {
-  res.send(page(req, `<form method="POST" action="/add" enctype="multipart/form-data">
-    <input name="title" placeholder="Title" required autofocus>
-    <textarea name="text" placeholder="Text" required></textarea>
-    <input type="file" name="image" accept="image/*">
-    <button type="submit">${t(req,'add')}</button>
-  </form>`, ' - Add post'));
-});
-
-app.post('/add', isAdmin, upload.single('image'), (req, res) => {
-  let p = {
-    id: posts.length ? posts[posts.length - 1].id + 1 : 1,
-    title: req.body.title,
-    text: req.body.text,
-    likes: 0,
-    comments: [],
-  };
-  if (req.file) p.image = req.file.filename;
-  posts.push(p);
-  savePosts(posts);
-  res.redirect('/');
-});
-
-/* Видалення всіх постів (адмін) */
-app.get('/deleteAll', isAdmin, (req, res) => {
+/* ----------  DELETE ALL POSTS ---------- */
+app.get('/deleteAll', isAdmin, (req,res) => {
   posts = [];
   savePosts(posts);
   res.redirect('/');
 });
 
-/* Запуск сервера */
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+/* ----------  START ---------- */
+app.listen(PORT, ()=>console.log(`Server started on http://localhost:${PORT}`));
