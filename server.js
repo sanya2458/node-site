@@ -69,13 +69,16 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .post h3{margin:0 0 10px;color:#d1d9e6}.meta{display:flex;justify-content:space-between;font-size:.85em;color:#9ba8b8;margin-top:8px}
  img{max-width:100%;border-radius:6px;cursor:pointer;margin-bottom:10px}
  .comment-admin{margin-left:8px;color:#f66;cursor:pointer}
- details summary{cursor:pointer; font-weight:bold; margin-bottom:10px; color:#85b4ff;}
+ details summary{cursor:pointer; font-weight:bold; margin-bottom:10px; color:#85b4ff; padding:8px 15px; border-radius:4px; background:#3f5e8c; display:inline-block; user-select:none; transition: background-color .3s;}
+ details summary:hover{background:#5a7ab0;}
  details[open] summary::after {content:" ▲";} 
  details summary::after {content:" ▼";}
  .comments-block p{margin:4px 0;}
+ .comments-block form{margin-top:10px;}
+ .comments-block input, .comments-block textarea{margin-bottom:10px;}
 </style>
 <script>
- function submitComment(f){return true} // без prompt, ім'я вводиться у формі
+ function submitComment(f){return true}
  function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
  function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
 </script>
@@ -144,30 +147,65 @@ app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
  savePosts(posts);res.redirect('/');
 });
 
-app.get('/edit/:id',isAdmin,(req,res)=>{const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- res.send(page(req,`<form method="POST" action="/edit/${p.id}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
- <input name="title" value="${esc(p.title)}" required><textarea name="body" rows="5" required>${esc(p.body)}</textarea>
- ${p.img?`<img src="/public/uploads/${esc(p.img)}" style="max-width:200px"><br>`:''}
- <input type="file" name="img" accept="image/*"><br>
- <label>Date:<input type="datetime-local" name="date" value="${new Date(p.date).toISOString().slice(0,16)}"></label><br><br>
- <button>${t(req,'save')}</button></form>`,' - Edit'));});
+// Відновлено редагування постів
+app.get('/edit/:id',isAdmin,(req,res)=>{
+  const p=posts.find(x=>x.id==req.params.id);
+  if(!p)return res.redirect('/');
+  res.send(page(req,`<form method="POST" action="/edit/${p.id}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
+    <input name="title" value="${esc(p.title)}" required>
+    <textarea name="body" rows="5" required>${esc(p.body)}</textarea>
+    ${p.img?`<img src="/public/uploads/${esc(p.img)}" style="max-width:200px"><br>`:''}
+    <input type="file" name="img" accept="image/*"><br>
+    <label>Date:<input type="datetime-local" name="date" value="${new Date(p.date).toISOString().slice(0,16)}"></label><br><br>
+    <button>${t(req,'save')}</button></form>`,' - Edit'));
+});
 app.post('/edit/:id',isAdmin,upload.single('img'),(req,res)=>{
- const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- p.title=req.body.title;p.body=req.body.body;if(req.file){if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}p.img=req.file.filename;}
- if(req.body.date)p.date=new Date(req.body.date).getTime();savePosts(posts);res.redirect('/');
+  const p=posts.find(x=>x.id==req.params.id);
+  if(!p)return res.redirect('/');
+  p.title=req.body.title;
+  p.body=req.body.body;
+  if(req.file){
+    if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}
+    p.img=req.file.filename;
+  }
+  if(req.body.date)p.date=new Date(req.body.date).getTime();
+  savePosts(posts);
+  res.redirect('/');
 });
 
-app.get('/delete/:id',isAdmin,(req,res)=>{const i=posts.findIndex(x=>x.id==req.params.id);if(i>=0){if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}posts.splice(i,1);savePosts(posts);}res.redirect('/');});
-app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/');});
+app.get('/delete/:id',isAdmin,(req,res)=>{
+  const i=posts.findIndex(x=>x.id==req.params.id);
+  if(i>=0){
+    if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}
+    posts.splice(i,1);
+    savePosts(posts);
+  }
+  res.redirect('/');
+});
+app.get('/deleteAll',isAdmin,(req,res)=>{
+  posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});
+  posts=[];
+  savePosts(posts);
+  res.redirect('/');
+});
 
 app.post('/comment/:id',(req,res)=>{
- const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- const name=req.body.name?esc(req.body.name.trim()):'Anon';const body=req.body.comment?esc(req.body.comment.trim()):'';
- if(body && name){p.comments=p.comments||[];p.comments.push({name,body});savePosts(posts);}res.redirect('/');
+ const p=posts.find(x=>x.id==req.params.id);
+ if(!p)return res.redirect('/');
+ const name=req.body.name?esc(req.body.name.trim()):'Anon';
+ const body=req.body.comment?esc(req.body.comment.trim()):'';
+ if(body && name){
+   p.comments=p.comments||[];
+   p.comments.push({name,body});
+   savePosts(posts);
+ }
+ res.redirect('/');
 });
 app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
- const p=posts.find(x=>x.id==req.params.pid);if(!p)return res.sendStatus(404);
- const i=req.params.cid;p.comments&&p.comments[i]?(p.comments.splice(i,1),savePosts(posts),res.sendStatus(200)):res.sendStatus(404);
+ const p=posts.find(x=>x.id==req.params.pid);
+ if(!p)return res.sendStatus(404);
+ const i=req.params.cid;
+ p.comments&&p.comments[i]?(p.comments.splice(i,1),savePosts(posts),res.sendStatus(200)):res.sendStatus(404);
 });
 
 app.listen(PORT,()=>console.log('Server running on port '+PORT));
