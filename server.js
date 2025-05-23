@@ -73,7 +73,7 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  button:hover,.btn:hover{background:#5a7ab0}.lang-btn{background:none;border:none;color:#85b4ff;font-size:1em;cursor:pointer}
  input,textarea{width:100%;padding:10px;background:#3a4a5c;color:#fff;border:none;border-radius:4px;margin-bottom:15px}
  .post{background:#2e3b4e;border-radius:8px;padding:15px;margin-bottom:25px;box-shadow:0 0 10px rgba(0,0,0,.2)}
- .post h3{margin:0 0 10px;color:#d1d9e6}.meta{display:flex;justify-content:flex-end;gap:15px;font-size:.85em;color:#9ba8b8;margin-top:8px}
+ .post h3{margin:0 0 10px;color:#d1d9e6}.meta{display:flex;justify-content:space-between;font-size:.85em;color:#9ba8b8;margin-top:8px}
  img{max-width:100%;border-radius:6px;cursor:pointer;margin-bottom:10px}
  .like{background:none;border:none;color:#85b4ff;font-size:1em;cursor:pointer}
  .comments{display:none;margin-top:10px}
@@ -83,14 +83,19 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .modal img{max-height:90%;max-width:90%}
 </style>
 <script>
- function like(id){fetch('/like/'+id,{method:'POST'}).then(()=>location.reload())}
+ function like(id){
+   fetch('/like/'+id,{method:'POST'})
+     .then(r=>r.ok?document.getElementById('lk'+id).innerText=parseInt(document.getElementById('lk'+id).innerText)+1:0);
+ }
  function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
  function sh(i){document.getElementById('m'+i).style.display='flex'}
  function hi(i){document.getElementById('m'+i).style.display='none'}
  function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
  function submitComment(f){const n=prompt('${dict.ua.namePrompt}');if(!n)return false;const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);return true}
  function toggleComments(id){const box=document.getElementById('c'+id);const btn=document.getElementById('b'+id);
-  if(box.style.display==='block'){box.style.display='none';btn.textContent='${dict.ua.showComments}'}else{box.style.display='block';btn.textContent='${dict.ua.hideComments}'}}
+  if(box.style.display==='block'){box.style.display='none';btn.textContent='${t(req,'showComments')}'}
+  else{box.style.display='block';btn.textContent='${t(req,'hideComments')}'}
+ }
 </script>
 </head><body>
 <div class="header">
@@ -121,7 +126,7 @@ app.get('/',(req,res)=>{
     ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
     <div class="meta">
       <span>${date}</span>
-      <button class="like" onclick="like(${p.id})">❤️ ${p.likes||0}</button>
+      <button class="like" onclick="like(${p.id})">❤️ <span id="lk${p.id}">${p.likes||0}</span></button>
     </div>
     <p>${esc(p.body)}</p>
     <button id="b${p.id}" class="toggle-btn" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
