@@ -175,7 +175,7 @@ app.get('/login',(req,res)=>{if(req.session.admin)return res.redirect('/');
 app.post('/login',(req,res)=>{const{login,password}=req.body;
  if(login===ADMIN_LOGIN&&password===ADMIN_PASS){req.session.admin=true;res.redirect('/');}
  else res.send(page(req,`<p style="color:#f66">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`,' - Login'));});
-app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/'));
+app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
 
 // Add post
 app.get('/add',isAdmin,(req,res)=>res.send(page(req,`<form method="POST" action="/add" enctype="multipart/form-data" style="max-width:600px;margin:auto">
