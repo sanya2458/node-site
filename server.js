@@ -83,26 +83,32 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .modal img{max-height:90%;max-width:90%}
 </style>
 <script>
- function like(id){
-   fetch('/like/'+id,{method:'POST',cache:'no-store'})
+ function like(idx){
+   fetch('/like/'+idx,{method:'POST',cache:'no-store'})
      .then(r=>r.json())
-     .then(j=>{document.getElementById('lk'+id).innerText=j.likes;});
+     .then(j=>{document.getElementById('lk'+idx).innerText=j.likes;});
  }
  function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
  function sh(i){document.getElementById('m'+i).style.display='flex'}
  function hi(i){document.getElementById('m'+i).style.display='none'}
- function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
+ function confirmDelComment(p,c){
+   if(confirm('${dict.ua.delCommentConf}'))
+     fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())
+ }
  function submitComment(f){
    const n=prompt('${dict.ua.namePrompt}');
    if(!n)return false;
    const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);
    return true;
  }
- function toggleComments(id){
-   const box=document.getElementById('c'+id);
-   const btn=document.getElementById('b'+id);
-   if(box.style.display==='block'){box.style.display='none';btn.textContent='${dict.ua.showComments}'}
-   else{box.style.display='block';btn.textContent='${dict.ua.hideComments}'}
+ function toggleComments(idx){
+   const box=document.getElementById('c'+idx);
+   const btn=document.getElementById('b'+idx);
+   if(box.style.display==='block'){
+     box.style.display='none';btn.textContent='${dict.ua.showComments}';
+   }else{
+     box.style.display='block';btn.textContent='${dict.ua.hideComments}';
+   }
  }
 </script>
 </head><body>
@@ -127,30 +133,34 @@ app.get('/',(req,res)=>{
  const q=(req.query.search||'').toLowerCase();
  const list=posts.filter(p=>!q||p.title.toLowerCase().includes(q)||p.body.toLowerCase().includes(q));
  const lang=req.session.lang||'ua';
- const postsHtml=list.map((p,i)=>{
+
+ const postsHtml=list.map((p,idx)=>{
   const date=new Date(p.date).toLocaleString(lang==='ua'?'uk-UA':'en-US',{dateStyle:'medium',timeStyle:'short'});
   return `<div class="post">
     <h3>${esc(p.title)}</h3>
-    ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
+    ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${idx})">`:''}
     <div class="meta">
       <span>${date}</span>
-      <button class="like" onclick="like(${p.id})">❤️ <span id="lk${p.id}">${p.likes||0}</span></button>
+      <button class="like" onclick="like(${idx})">❤️ <span id="lk${idx}">${p.likes||0}</span></button>
     </div>
     <p>${esc(p.body)}</p>
-    <button id="b${p.id}" class="toggle-btn" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
-    <div id="c${p.id}" class="comments">
-      ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
-      <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
+    <button id="b${idx}" class="toggle-btn" onclick="toggleComments(${idx})">${t(req,'showComments')}</button>
+    <div id="c${idx}" class="comments">
+      ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${idx},${j})">×</span>`:''}</p>`).join('')}
+      <form method="POST" action="/comment/${idx}" onsubmit="return submitComment(this)">
         <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
         <button>${t(req,'send')}</button>
       </form>
     </div>
-    ${req.session.admin?`<div><a href="/edit/${p.id}">${t(req,'edit')}</a> | <a href="/delete/${p.id}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a></div>`:''}
-    <div id="m${i}" class="modal" onclick="hi(${i})"><img src="/public/uploads/${esc(p.img)}"></div>
+    ${req.session.admin?`<div><a href="/edit/${idx}">${t(req,'edit')}</a> | <a href="/delete/${idx}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a></div>`:''}
+    <div id="m${idx}" class="modal" onclick="hi(${idx})"><img src="/public/uploads/${esc(p.img)}"></div>
   </div>`;}).join('');
+
  res.send(page(req,`
- <form method="GET" style="margin-bottom:20px"><input type="search" name="search" placeholder="${t(req,'search')}" value="${esc(req.query.search||'')}">
- <button>${t(req,'search')}</button></form>
+ <form method="GET" style="margin-bottom:20px">
+   <input type="search" name="search" placeholder="${t(req,'search')}" value="${esc(req.query.search||'')}">
+   <button>${t(req,'search')}</button>
+ </form>
  ${postsHtml||'<p>No posts</p>'}`));
 });
 
@@ -165,51 +175,61 @@ app.get('/login',(req,res)=>{if(req.session.admin)return res.redirect('/');
 app.post('/login',(req,res)=>{const{login,password}=req.body;
  if(login===ADMIN_LOGIN&&password===ADMIN_PASS){req.session.admin=true;res.redirect('/');}
  else res.send(page(req,`<p style="color:#f66">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`,' - Login'));});
-app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
+app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/'));
 
 // Add post
 app.get('/add',isAdmin,(req,res)=>res.send(page(req,`<form method="POST" action="/add" enctype="multipart/form-data" style="max-width:600px;margin:auto">
  <input name="title" placeholder="Title" required><textarea name="body" placeholder="Content" rows="5" required></textarea>
  <input type="file" name="img" accept="image/*"><button>${t(req,'add')}</button></form>`,' - Add')));
 app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
- const id=posts.length?Math.max(...posts.map(p=>p.id))+1:1;
- posts.unshift({id,title:req.body.title,body:req.body.body,img:req.file?req.file.filename:'',date:Date.now(),likes:0,comments:[]});
+ posts.unshift({title:req.body.title,body:req.body.body,img:req.file?req.file.filename:'',date:Date.now(),likes:0,comments:[]});
  savePosts(posts);res.redirect('/');
 });
 
 // Edit post
-app.get('/edit/:id',isAdmin,(req,res)=>{const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- res.send(page(req,`<form method="POST" action="/edit/${p.id}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
+app.get('/edit/:idx',isAdmin,(req,res)=>{const i=+req.params.idx;if(i<0||i>=posts.length)return res.redirect('/');
+ const p=posts[i];
+ res.send(page(req,`<form method="POST" action="/edit/${i}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
  <input name="title" value="${esc(p.title)}" required><textarea name="body" rows="5" required>${esc(p.body)}</textarea>
  ${p.img?`<img src="/public/uploads/${esc(p.img)}" style="max-width:200px"><br>`:''}
  <input type="file" name="img" accept="image/*"><br>
  <label>Date:<input type="datetime-local" name="date" value="${new Date(p.date).toISOString().slice(0,16)}"></label><br><br>
  <button>${t(req,'save')}</button></form>`,' - Edit'));});
-app.post('/edit/:id',isAdmin,upload.single('img'),(req,res)=>{
- const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- p.title=req.body.title;p.body=req.body.body;if(req.file){if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}p.img=req.file.filename;}
- if(req.body.date)p.date=new Date(req.body.date).getTime();savePosts(posts);res.redirect('/');
+app.post('/edit/:idx',isAdmin,upload.single('img'),(req,res)=>{
+ const i=+req.params.idx;if(i<0||i>=posts.length)return res.redirect('/');
+ const p=posts[i];
+ p.title=req.body.title;p.body=req.body.body;
+ if(req.file){if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}p.img=req.file.filename;}
+ if(req.body.date)p.date=new Date(req.body.date).getTime();
+ savePosts(posts);res.redirect('/');
 });
 
 // Delete post
-app.get('/delete/:id',isAdmin,(req,res)=>{const i=posts.findIndex(x=>x.id==req.params.id);if(i>=0){if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}posts.splice(i,1);savePosts(posts);}res.redirect('/');});
-app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/');});
+app.get('/delete/:idx',isAdmin,(req,res)=>{const i=+req.params.idx;
+ if(i>=0&&i<posts.length){if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}posts.splice(i,1);savePosts(posts);}
+ res.redirect('/');
+});
+app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/')});
 
 // Likes
-app.post('/like/:id',(req,res)=>{const p=posts.find(x=>x.id==req.params.id);
- if(p){p.likes=(p.likes||0)+1;savePosts(posts);return res.json({likes:p.likes});}
+app.post('/like/:idx',(req,res)=>{
+ const i=+req.params.idx;
+ if(i>=0&&i<posts.length){posts[i].likes=(posts[i].likes||0)+1;savePosts(posts);return res.json({likes:posts[i].likes});}
  res.sendStatus(404);
 });
 
 // Comments
-app.post('/comment/:id',(req,res)=>{
- const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
- const name=req.body.name?esc(req.body.name.trim()):'Anon';const body=req.body.comment?esc(req.body.comment.trim()):'';
- if(body){p.comments=p.comments||[];p.comments.push({name,body});savePosts(posts);}res.redirect('/');
+app.post('/comment/:idx',(req,res)=>{
+ const i=+req.params.idx;if(i<0||i>=posts.length)return res.redirect('/');
+ const name=req.body.name?esc(req.body.name.trim()):'Anon';
+ const body=req.body.comment?esc(req.body.comment.trim()):'';
+ if(body){posts[i].comments=posts[i].comments||[];posts[i].comments.push({name,body});savePosts(posts);}
+ res.redirect('/');
 });
-app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
- const p=posts.find(x=>x.id==req.params.pid);if(!p)return res.sendStatus(404);
- const i=req.params.cid;p.comments&&p.comments[i]?(p.comments.splice(i,1),savePosts(posts),res.sendStatus(200)):res.sendStatus(404);
+app.post('/comment/delete/:pIdx/:cIdx',isAdmin,(req,res)=>{
+ const p=+req.params.pIdx,c=+req.params.cIdx;
+ if(p>=0&&p<posts.length&&posts[p].comments&&posts[p].comments[c]){posts[p].comments.splice(c,1);savePosts(posts);return res.sendStatus(200);}
+ res.sendStatus(404);
 });
 
 // Server
