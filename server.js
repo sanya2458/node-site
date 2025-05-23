@@ -1,3 +1,5 @@
+// == FULL UPDATED SERVER ==
+
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
@@ -73,11 +75,25 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .modal img{max-height:90%;max-width:90%}
 </style>
 <script>
- function sh(i){document.getElementById('m'+i).style.display='flex'}
- function hi(i){document.getElementById('m'+i).style.display='none'}
- function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
- function submitComment(f){const n=prompt('${dict.ua.namePrompt}');if(!n)return false;const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);return true}
- function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
+function sh(i){document.getElementById('m'+i).style.display='flex'}
+function hi(i){document.getElementById('m'+i).style.display='none'}
+function toggleComments(i){
+  const el=document.getElementById('comments'+i);
+  const btn=el.previousElementSibling;
+  if(el.style.display==='none'){el.style.display='block';btn.textContent='${dict.ua.hideComments}';}
+  else{el.style.display='none';btn.textContent='${dict.ua.showComments}';}
+}
+function confirmDelComment(p,c){
+  if(confirm('${dict.ua.delCommentConf}'))
+    fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())
+}
+function submitComment(f,i){
+  const n=document.getElementById('name'+i);
+  if(!n||!n.value.trim()){alert('${dict.ua.namePrompt}');return false;}
+  f.querySelector('input[name="name"]').value=n.value.trim();
+  return true;
+}
+function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
 </script>
 </head><body>
 <div class="header">
@@ -106,10 +122,13 @@ app.get('/',(req,res)=>{
     ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
     <div class="meta"><span>${date}</span></div>
     <p>${esc(p.body)}</p>
-    <div class="comments" style="display:block">
+    <button onclick="toggleComments(${i})">${t(req,'showComments')}</button>
+    <div id="comments${i}" class="comments" style="display:none">
+      <input id="name${i}" placeholder="${t(req,'namePrompt')}" required autocomplete="off">
       ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
-      <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
+      <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this, ${i})">
         <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
+        <input type="hidden" name="name">
         <button>${t(req,'send')}</button>
       </form>
     </div>
@@ -122,8 +141,9 @@ app.get('/',(req,res)=>{
  ${postsHtml||'<p>No posts</p>'}`));
 });
 
-app.get('/lang/:lang',(req,res)=>{if(['ua','en'].includes(req.params.lang))req.session.lang=req.params.lang;res.redirect('back');});
+// Other routes: /lang, /login, /logout, /add, /edit, /delete... (unchanged)
 
+app.get('/lang/:lang',(req,res)=>{if(['ua','en'].includes(req.params.lang))req.session.lang=req.params.lang;res.redirect('back');});
 app.get('/login',(req,res)=>{if(req.session.admin)return res.redirect('/');
  res.send(page(req,`<form method="POST" action="/login" style="max-width:300px;margin:auto">
  <input name="login" placeholder="Login" required autofocus><input type="password" name="password" placeholder="Password" required>
