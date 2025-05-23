@@ -64,9 +64,10 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .header-buttons{position:absolute;right:15px;display:flex;gap:10px}
  button,.btn{background:#3f5e8c;color:#fff;border:none;padding:10px 15px;border-radius:4px;cursor:pointer;font-size:1em}
  button:hover,.btn:hover{background:#5a7ab0}.lang-btn{background:none;border:none;color:#85b4ff;font-size:1em;cursor:pointer}
- input,textarea{width:100%;padding:10px;background:#3a4a5c;color:#fff;border:none;border-radius:4px;margin-bottom:15px}
- .post{background:#2e3b4e;border-radius:8px;padding:15px;margin-bottom:25px;box-shadow:0 0 10px rgba(0,0,0,.2)}
- .post h3{margin:0 0 10px;color:#d1d9e6}.meta{display:flex;justify-content:space-between;font-size:.85em;color:#9ba8b8;margin-top:8px}
+ input,textarea{width:100%;padding:10px;background:#3a4a5c;color:#fff;border:none;border-radius:4px;margin-bottom:15px;box-sizing:border-box;}
+ .post{background:#2e3b4e;border-radius:8px;padding:15px;margin-bottom:25px;box-shadow:0 0 10px rgba(0,0,0,.2);position:relative;}
+ .post h3{margin:0 0 10px;color:#d1d9e6}
+ .meta{display:flex;justify-content:space-between;font-size:.85em;color:#9ba8b8;margin-top:8px}
  img{max-width:100%;border-radius:6px;cursor:pointer;margin-bottom:10px}
  .comment-admin{margin-left:8px;color:#f66;cursor:pointer}
  details summary{cursor:pointer; font-weight:bold; margin-bottom:10px; color:#85b4ff; padding:8px 15px; border-radius:4px; background:#3f5e8c; display:inline-block; user-select:none; transition: background-color .3s;}
@@ -76,10 +77,21 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .comments-block p{margin:4px 0;}
  .comments-block form{margin-top:10px;}
  .comments-block input, .comments-block textarea{margin-bottom:10px;}
+ .comments-block input, .comments-block textarea {max-width: 100%; box-sizing: border-box;}
+ /* Новий стиль, щоб форма не виходила за межі поста */
+ .comments-block form {
+   overflow: hidden;
+ }
+ .post-buttons {
+   margin-top: 10px;
+   display: flex;
+   gap: 10px;
+ }
 </style>
 <script>
  function submitComment(f){return true}
  function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
+ function confirmDelPost(id){if(confirm('${dict.ua.conf}'))location='/delete/'+id}
  function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
 </script>
 </head><body>
@@ -109,13 +121,18 @@ app.get('/',(req,res)=>{
     ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
     <div class="meta"><span>${date}</span></div>
     <p>${esc(p.body)}</p>
+    ${req.session.admin?`
+      <div class="post-buttons">
+        <a href="/edit/${p.id}" class="btn">${t(req,'edit')}</a>
+        <button class="btn" onclick="confirmDelPost(${p.id})">${t(req,'remove')}</button>
+      </div>`:''}
     <details>
       <summary>${t(req,'showComments')}</summary>
       <div class="comments-block">
         ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?` <span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
         <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
-          <input name="name" placeholder="${t(req,'namePrompt')}" required autocomplete="off">
-          <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
+          <input name="name" placeholder="${t(req,'namePrompt')}" required autocomplete="off" maxlength="50">
+          <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off" maxlength="200">
           <button>${t(req,'send')}</button>
         </form>
       </div>
@@ -147,7 +164,6 @@ app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
  savePosts(posts);res.redirect('/');
 });
 
-// Відновлено редагування постів
 app.get('/edit/:id',isAdmin,(req,res)=>{
   const p=posts.find(x=>x.id==req.params.id);
   if(!p)return res.redirect('/');
