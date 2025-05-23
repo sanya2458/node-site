@@ -1,12 +1,3 @@
-/* ------------  server.js  ------------ */
-/*  Функції:
-      – постійне зберігання постів (data/posts.json);
-      – адмін-авторизація (login/pass у data/config.json);
-      – пошук, лайки, коментарі, дати;
-      – EN / UA перемикач (кнопка зліва у шапці);
-      – налаштування (зміна логіну/паролю), «видалити все».
-*/
-
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
@@ -50,18 +41,22 @@ const dict = {
        login:'Увійти', wrong:'Невірний логін або пароль', back:'Назад',
        edit:'Редагувати', remove:'Видалити', conf:'Видалити цей пост?',
        commentPl:'Коментар...', send:'Надіслати', settings:'Налаштування',
-       save:'Зберегти', lang:'EN', search:'Пошук...', likes:'Лайки' },
+       save:'Зберегти', lang:'EN', search:'Пошук...', likes:'Лайки',
+       enterName:'Введіть ваше ім’я', deleteCommentConf:'Видалити цей коментар?', 
+       editDate:'Редагувати дату публікації (ISO формат)', updateDate:'Оновити дату' },
   en:{ title:'Fredllosgram', add:'Add post', deleteAll:'Delete all', logout:'Logout',
        login:'Login', wrong:'Invalid login or password', back:'Back',
        edit:'Edit', remove:'Delete', conf:'Delete this post?',
        commentPl:'Comment...', send:'Send', settings:'Settings',
-       save:'Save', lang:'UA', search:'Search...', likes:'Likes' }
+       save:'Save', lang:'UA', search:'Search...', likes:'Likes',
+       enterName:'Enter your name', deleteCommentConf:'Delete this comment?', 
+       editDate:'Edit publish date (ISO format)', updateDate:'Update date' }
 };
 const t = (req,k)=>dict[(req.session.lang||'ua')][k];
 
 /* ----------  HELPERS ---------- */
 const isAdmin = (req,res,next)=> req.session?.admin ? next() : res.redirect('/login');
-const esc = s=>s.replace(/[&<>"]/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+const esc = s=>String(s).replace(/[&<>"]/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
 
 /* ----------  COMMON PAGE HEAD ---------- */
 function head(req,title=''){
@@ -70,223 +65,435 @@ function head(req,title=''){
   <style>
     body{font-family:'Segoe UI',sans-serif;margin:0;padding:0;background:#1f2a38;color:#fff}
     .container{max-width:1000px;margin:auto;padding:20px}
-    .header{display:flex;align-items:center;padding:15px;background:#30445c;margin-bottom:20px;position:relative}
-    .header-left{display:flex;gap:10px}
-    .header-title{margin-left:15px;font-size:1.5em;color:#d1d9e6}
-    .header-buttons{margin-left:auto;display:flex;gap:10px}
-    button,.btn{background:#3f5e8c;color:#fff;border:none;padding:10px 15px;border-radius:4px;cursor:pointer;text-decoration:none}
-    button:hover,.btn:hover{background:#5a7ab0}
-    .lang-btn{background:none;border:none;color:#85b4ff;font-size:1em;padding:0 6px;cursor:pointer}
-    .action{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:25px 0}
-    .post{background:#2e3b4e;border-radius:8px;padding:15px;margin-bottom:25px;box-shadow:0 0 10px rgba(0,0,0,.2)}
-    .post h3{margin:0 0 10px;color:#d1d9e6}
-    .meta{font-size:.8em;color:#9ba8b8;margin-bottom:8px}
-    img{max-width:100%;border-radius:6px;cursor:pointer}
-    .admin{margin-top:10px;font-size:.9em}
-    a{color:#85b4ff;text-decoration:none}
-    a:hover{text-decoration:underline}
-    form.inline{display:inline}
-    input[type=text],input[type=password],textarea{
-      width:100%;padding:10px;border:none;border-radius:4px;background:#3a4a5c;color:#fff;margin-bottom:15px
+    .header {
+      display:flex; align-items:center; padding:15px; background:#30445c; margin-bottom:20px; 
+      justify-content:center; position:relative;
+      font-size: 1.5em; font-weight: 700; color:#d1d9e6;
+      user-select:none;
     }
-    input[type=number]{width:90px;padding:8px;border:none;border-radius:4px;background:#3a4a5c;color:#fff;margin-bottom:15px}
-    .like{border:none;background:none;color:#85b4ff;font-size:1em;cursor:pointer}
-    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);justify-content:center;align-items:center}
-    .modal img{max-height:90%;max-width:90%}
+    .header-left {
+      position:absolute; left:20px; top:50%; transform: translateY(-50%);
+    }
+    .header-buttons {
+      position:absolute; right:20px; top:50%; transform: translateY(-50%);
+      display:flex; gap:10px;
+    }
+    button,.btn {
+      background:#3f5e8c; color:#fff; border:none; padding:10px 15px; border-radius:4px; cursor:pointer; text-decoration:none;
+      font-size:1em;
+      transition: background 0.3s;
+    }
+    button:hover,.btn:hover { background:#5a7ab0 }
+    .lang-btn {
+      background:none; border:none; color:#85b4ff; font-size:1em; padding:0 6px; cursor:pointer;
+      user-select:none;
+    }
+    .action {
+      display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:25px 0;
+    }
+    .post {
+      background:#2e3b4e; border-radius:8px; padding:15px; margin-bottom:25px; box-shadow:0 0 10px rgba(0,0,0,.2);
+    }
+    .post h3 {
+      margin:0 0 10px; color:#d1d9e6;
+      user-select:none;
+    }
+    .meta {
+      font-size:.8em; color:#9ba8b8; margin:8px 0 4px 0;
+      text-align:center;
+    }
+    .image-container {
+      text-align:center; margin-bottom: 8px;
+      position: relative;
+    }
+    img {
+      max-width:100%; border-radius:6px; cursor:pointer;
+      user-select:none;
+      max-height: 400px;
+      object-fit: contain;
+    }
+    .like {
+      border:none; background:none; color:#85b4ff; font-size:1.2em; cursor:pointer;
+      display:block; margin: 0 auto;
+      user-select:none;
+    }
+    .admin {
+      margin-top:10px; font-size:.9em; text-align:right;
+    }
+    a {
+      color:#85b4ff; text-decoration:none;
+      user-select:none;
+    }
+    a:hover { text-decoration:underline }
+    form.inline {
+      display:inline;
+    }
+    input[type=text], input[type=password], input[type=number], textarea {
+      width:100%; padding:10px; border:none; border-radius:4px; background:#3a4a5c; color:#fff; margin-bottom:15px;
+      font-size:1em; box-sizing: border-box;
+    }
+    input[type=number] {
+      width:90px;
+    }
+    button.btn {
+      width: auto;
+      padding: 10px 20px;
+    }
+    /* modal */
+    .modal {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.8);
+      justify-content:center; align-items:center; z-index: 999;
+    }
+    .modal img {
+      max-height:90%; max-width:90%;
+    }
+    /* comments */
+    .comments-container {
+      margin-top:12px; border-top:1px solid #3a4a5c; padding-top:10px;
+    }
+    .comment-single {
+      background:#3a4a5c; padding:8px 10px; border-radius:6px; cursor:pointer;
+      user-select:none;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .comment-single:hover {
+      background:#50677a;
+    }
+    .comment-full-list {
+      display:none;
+      background:#2a3951; padding:10px; border-radius:6px; margin-top:5px;
+      max-height: 200px; overflow-y: auto;
+    }
+    .comment-full-list p {
+      margin: 6px 0; font-size: 0.9em;
+    }
+    .comment-full-list p b {
+      color:#85b4ff;
+    }
+    .comment-delete {
+      position: absolute;
+      top: 5px;
+      right: 10px;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-weight: bold;
+      user-select:none;
+    }
+    .comment-delete:hover {
+      color: #ff4c4c;
+    }
+    /* date edit */
+    .date-edit-container {
+      margin: 10px 0 20px 0;
+    }
+    .date-edit-container input[type=text] {
+      width: 100%;
+      margin-bottom: 10px;
+      font-family: monospace;
+    }
+    .date-edit-container button {
+      margin-left: 0;
+      width: 100%;
+    }
+    /* search */
+    .search-bar {
+      margin: 15px auto;
+      max-width: 400px;
+    }
   </style>
-  <script>
-    function like(id){fetch('/like/'+id).then(()=>location.reload())}
-    function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
-    function sh(i){document.getElementById('m'+i).style.display='flex'}
-    function hi(i){document.getElementById('m'+i).style.display='none'}
-  </script></head><body>`;
+  </head><body><div class="container">`;
 }
 
-/* ----------  HOME + SEARCH ---------- */
-app.get('/',(req,res)=>{
-  const q=(req.query.q||'').toLowerCase();
-  const list = posts.filter(p=>!q||p.title.toLowerCase().includes(q)||p.content.toLowerCase().includes(q));
+function foot(){
+  return `</div></body></html>`;
+}
 
-  let h=head(req);
-  /* --- header --- */
-  h+=`<div class="header">
-        <div class="header-left">
-          <a class="lang-btn" href="/lang/${req.session.lang==='en'?'ua':'en'}">${t(req,'lang')}</a>
-          <div class="header-title">${t(req,'title')}</div>
+/* ----------  ROUTES ---------- */
+
+app.get('/', (req,res)=>{
+  try {
+    const posts = loadPosts();
+
+    let html = head(req);
+    html += `<div class="header">${t(req,'title')}
+      <div class="header-left"></div>
+      <div class="header-buttons">
+        ${req.session.admin ? `<a href="/add" class="btn">${t(req,'add')}</a>
+        <a href="/settings" class="btn">${t(req,'settings')}</a>
+        <a href="/logout" class="btn">${t(req,'logout')}</a>` :
+        `<a href="/login" class="btn">${t(req,'login')}</a>`}
+        <form method="post" action="/lang" style="display:inline;">
+          <button type="submit" class="lang-btn">${t(req,'lang')}</button>
+        </form>
+      </div>
+    </div>`;
+
+    html += `<form method="GET" action="/" class="search-bar">
+      <input type="text" name="q" placeholder="${t(req,'search')}" value="${esc(req.query.q||'')}">
+      <button class="btn" type="submit">🔍</button>
+    </form>`;
+
+    // filter posts by search query if present
+    let filtered = posts;
+    if (req.query.q) {
+      const q = req.query.q.toLowerCase();
+      filtered = posts.filter(p=>
+        p.title.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.comments.some(c=>c.text.toLowerCase().includes(q) || c.author.toLowerCase().includes(q))
+      );
+    }
+
+    if(filtered.length === 0) {
+      html += `<p style="text-align:center; margin-top:50px; font-size:1.2em;">No posts found.</p>`;
+    }
+
+    filtered.forEach(post=>{
+      html += `<div class="post" id="post-${post.id}">
+        <h3>${esc(post.title)}</h3>
+        <div class="image-container">
+          <img src="${post.image}" alt="${esc(post.title)}" loading="lazy" onclick="showModal('${post.image}')">
         </div>
-        <div class="header-buttons">`;
-  if(req.session.admin){
-    h+=`<form method="POST" action="/logout" class="inline"><button>${t(req,'logout')}</button></form>`;
-  }else{
-    h+=`<a class="btn" href="/login">${t(req,'login')}</a>`;
-  }
-  h+='</div></div>';
+        <div class="meta">${new Date(post.date).toLocaleString()}</div>
+        <button class="like" data-id="${post.id}" title="${t(req,'likes')}">${t(req,'likes')}: ${post.likes||0} ❤️</button>`;
 
-  /* --- action bar --- */
-  h+='<div class="action">';
-  if(req.session.admin){
-    h+=`<a class="btn" href="/add">${t(req,'add')}</a>
-        <button class="btn" onclick="delAll()">${t(req,'deleteAll')}</button>
-        <a class="btn" href="/settings">${t(req,'settings')}</a>`;
-  }
-  h+=`<form class="inline" method="GET" action="/">
-        <input type="text" name="q" placeholder="${t(req,'search')}" value="${esc(q)}">
-      </form></div>`;
+      // comments section
+      html += `<div class="comments-container">`;
+      if(post.comments.length>0){
+        // show last comment only, rest hidden and toggle on click
+        const lastComment = post.comments[post.comments.length - 1];
+        html += `<div class="comment-single" onclick="toggleComments(${post.id})">
+          <b>${esc(lastComment.author)}</b>: ${esc(lastComment.text)} (${new Date(lastComment.date).toLocaleString()})
+          ${req.session.admin ? `<span class="comment-delete" onclick="event.stopPropagation(); deleteComment(${post.id},${post.comments.length-1})" title="${t(req,'deleteCommentConf')}">×</span>` : ''}
+        </div>`;
 
-  /* --- posts --- */
-  h+='<div class="container">';
-  list.sort((a,b)=>(a.order??1e9)-(b.order??1e9))
-      .forEach((p,i)=>{
-        h+=`<div class="post">
-               <h3>${esc(p.title)}</h3>
-               <div class="meta">${new Date(p.date).toLocaleString(req.session.lang==='en'?'en-US':'uk-UA')}
-                 • <button class="like" onclick="like(${i})">❤️ ${p.likes||0} ${t(req,'likes')}</button>
-               </div>
-               <img src="${p.image}" onclick="sh(${i})">
-               <div id="m${i}" class="modal" onclick="hi(${i})"><img src="${p.image}"></div>
-               <p>${esc(p.content)}</p>`;
-        if(req.session.admin){
-          h+=`<div class="admin">
-                 <a href="/edit/${i}">${t(req,'edit')}</a> |
-                 <a href="/delete/${i}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a>
-               </div>`;
+        if(post.comments.length>1){
+          html += `<div class="comment-full-list" id="comments-full-${post.id}">`;
+          post.comments.slice(0,-1).forEach((c,i)=>{
+            html += `<p><b>${esc(c.author)}</b>: ${esc(c.text)} (${new Date(c.date).toLocaleString()})
+              ${req.session.admin ? `<span class="comment-delete" onclick="event.stopPropagation(); deleteComment(${post.id},${i})" title="${t(req,'deleteCommentConf')}">×</span>` : ''}
+              </p>`;
+          });
+          html += `</div>`;
         }
-        /* comments */
-        h+=`<div style="margin-top:12px;border-top:1px solid #3a4a5c;padding-top:10px">`;
-        (p.comments||[]).forEach(c=>{
-          h+=`<p style="margin:4px 0"><b>${esc(c.when)}</b>: ${esc(c.text)}</p>`;
-        });
-        h+=`<form method="POST" action="/comment/${i}">
-               <input type="text" name="text" placeholder="${t(req,'commentPl')}" required>
-               <button class="btn" style="margin-top:6px">${t(req,'send')}</button>
-             </form></div></div>`;
-      });
-  h+='</div></body></html>';
-  res.send(h);
+      } else {
+        html += `<p style="font-style: italic;">No comments yet.</p>`;
+      }
+
+      // add comment form
+      html += `<form method="POST" action="/comment/${post.id}">
+        <input type="text" name="author" placeholder="${t(req,'enterName')}" required maxlength="30" />
+        <textarea name="comment" placeholder="${t(req,'commentPl')}" required maxlength="300"></textarea>
+        <button type="submit" class="btn">${t(req,'send')}</button>
+      </form>`;
+
+      // admin edit date section
+      if(req.session.admin){
+        html += `<form method="POST" action="/editdate/${post.id}" class="date-edit-container">
+          <label>${t(req,'editDate')}</label><br>
+          <input type="text" name="newdate" value="${esc(post.date)}" placeholder="YYYY-MM-DDTHH:mm:ssZ" />
+          <button type="submit" class="btn">${t(req,'updateDate')}</button>
+        </form>`;
+      }
+
+      // admin buttons: edit, delete
+      if(req.session.admin){
+        html += `<div class="admin">
+          <a href="/edit/${post.id}" class="btn">${t(req,'edit')}</a>
+          <form method="POST" action="/delete/${post.id}" class="inline" onsubmit="return confirm('${t(req,'conf')}');">
+            <button type="submit" class="btn">${t(req,'remove')}</button>
+          </form>
+        </div>`;
+      }
+
+      html += `</div></div>`;
+    });
+
+    html += foot();
+
+    res.send(html);
+  } catch(e){
+    console.error('Error in /:', e);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
-/* ----------  LANG ---------- */
-app.get('/lang/:code',(req,res)=>{ req.session.lang=req.params.code==='en'?'en':'ua'; res.redirect('/'); });
+app.post('/lang', (req,res)=>{
+  req.session.lang = (req.session.lang === 'ua') ? 'en' : 'ua';
+  res.redirect('back');
+});
 
-/* ----------  LIKE ---------- */
-app.get('/like/:id',(req,res)=>{
-  const id=+req.params.id;
-  if(id>=0&&id<posts.length){ posts[id].likes=(posts[id].likes||0)+1; savePosts(); }
-  res.sendStatus(200);
+app.get('/login', (req,res)=>{
+  const html = head(req, ' - '+t(req,'login')) + `
+    <h2>${t(req,'login')}</h2>
+    <form method="POST" action="/login">
+      <input name="login" placeholder="${t(req,'login')}" required />
+      <input name="password" type="password" placeholder="******" required />
+      <button class="btn" type="submit">${t(req,'login')}</button>
+    </form>
+    <p><a href="/">⬅ ${t(req,'back')}</a></p>
+  ` + foot();
+  res.send(html);
+});
+
+app.post('/login', (req,res)=>{
+  if(req.body.login === ADMIN_LOGIN && req.body.password === ADMIN_PASS){
+    req.session.admin = true;
+    res.redirect('/');
+  } else {
+    const html = head(req) + `<p style="color:red">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>` + foot();
+    res.send(html);
+  }
+});
+
+app.get('/logout', (req,res)=>{
+  req.session.destroy(()=>res.redirect('/'));
+});
+
+/* ----------  ADD POST ---------- */
+app.get('/add', isAdmin, (req,res)=>{
+  const html = head(req, ' - '+t(req,'add')) + `
+    <h2>${t(req,'add')}</h2>
+    <form method="POST" action="/add" enctype="multipart/form-data">
+      <input name="title" placeholder="Title" required maxlength="100" />
+      <textarea name="description" placeholder="Description" maxlength="1000"></textarea>
+      <input type="file" name="image" accept="image/*" required />
+      <button type="submit" class="btn">${t(req,'add')}</button>
+    </form>
+    <p><a href="/">⬅ ${t(req,'back')}</a></p>
+  ` + foot();
+  res.send(html);
+});
+
+app.post('/add', isAdmin, upload.single('image'), (req,res)=>{
+  try{
+    const { title, description } = req.body;
+    if(!req.file) throw new Error('Image required');
+    const post = {
+      id: Date.now(),
+      title,
+      description: description||'',
+      image: `/public/uploads/${req.file.filename}`,
+      date: new Date().toISOString(),
+      likes: 0,
+      comments: []
+    };
+    posts.push(post);
+    savePosts(posts);
+    res.redirect('/');
+  } catch(e){
+    res.status(400).send('Error: ' + e.message);
+  }
+});
+
+/* ----------  DELETE POST ---------- */
+app.post('/delete/:id', isAdmin, (req,res)=>{
+  try{
+    const id = Number(req.params.id);
+    posts = posts.filter(p=>p.id !== id);
+    savePosts(posts);
+    res.redirect('/');
+  } catch(e){
+    res.status(500).send('Error deleting post');
+  }
+});
+
+/* ----------  EDIT DATE ---------- */
+app.post('/editdate/:id', isAdmin, (req,res)=>{
+  try {
+    const id = Number(req.params.id);
+    const newdate = req.body.newdate;
+    if (!new Date(newdate).toString() === "Invalid Date"){
+      // skip invalid date update
+      throw new Error('Invalid date format');
+    }
+    let post = posts.find(p=>p.id === id);
+    if(post){
+      post.date = newdate;
+      savePosts(posts);
+    }
+    res.redirect('/');
+  } catch(e){
+    res.status(400).send('Error updating date');
+  }
 });
 
 /* ----------  COMMENT ---------- */
-app.post('/comment/:id',(req,res)=>{
-  const id=+req.params.id;
-  if(id>=0&&id<posts.length){
-    posts[id].comments = posts[id].comments||[];
-    posts[id].comments.push({ text:req.body.text, when:new Date().toLocaleString( req.session.lang==='en'?'en-US':'uk-UA' )});
-    savePosts();
+app.post('/comment/:id', (req,res)=>{
+  try{
+    const id = Number(req.params.id);
+    let post = posts.find(p=>p.id===id);
+    if(!post) throw new Error('Post not found');
+    const author = req.body.author.trim().substring(0,30);
+    const text = req.body.comment.trim().substring(0,300);
+    if(!author || !text) throw new Error('Author and comment required');
+    post.comments.push({ author, text, date: new Date().toISOString() });
+    savePosts(posts);
+    res.redirect('/');
+  } catch(e){
+    res.status(400).send('Error adding comment');
   }
-  res.redirect('/');
 });
 
-/* ----------  LOGIN / LOGOUT ---------- */
-app.get('/login',(req,res)=>{
-  if(req.session.admin) return res.redirect('/');
-  res.send(head(req,' - Login')+`
-    <div class="container">
-      <h2>${t(req,'login')}</h2>
-      <form method="POST" action="/login">
-        <input type="text"    name="login"    placeholder="Login"    required>
-        <input type="password" name="password" placeholder="Password" required>
-        <button class="btn">${t(req,'login')}</button>
-      </form>
-      <div style="margin-top:15px"><a class="btn" href="/">${t(req,'back')}</a></div>
-    </div></body></html>`);
-});
-app.post('/login',(req,res)=>{
-  if(req.body.login===ADMIN_LOGIN && req.body.password===ADMIN_PASS){
-    req.session.admin=true; return res.redirect('/');
+/* ----------  DELETE COMMENT ---------- */
+app.post('/comment/delete/:postId/:commIdx', isAdmin, (req,res)=>{
+  try{
+    const postId = Number(req.params.postId);
+    const commIdx = Number(req.params.commIdx);
+    let post = posts.find(p=>p.id === postId);
+    if(post && post.comments[commIdx]){
+      post.comments.splice(commIdx,1);
+      savePosts(posts);
+    }
+    res.redirect('/');
+  } catch(e){
+    res.status(500).send('Error deleting comment');
   }
-  res.send(head(req,' - Wrong')+`
-    <div class="container"><h2 style="color:#f66">${t(req,'wrong')}</h2>
-    <a class="btn" href="/login">${t(req,'back')}</a></div></body></html>`);
-});
-app.post('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
-
-/* ----------  ADD ---------- */
-app.get('/add',isAdmin,(req,res)=>{
-  res.send(head(req,' - Add')+`
-    <div class="container"><h2>${t(req,'add')}</h2>
-      <form method="POST" action="/add" enctype="multipart/form-data">
-        <input name="title"   placeholder="Title" required>
-        <textarea name="content" rows="4" placeholder="Text" required></textarea>
-        <input type="number" name="order" placeholder="Order" min="1" required>
-        <input type="file"   name="image" accept="image/*" required>
-        <button class="btn">${t(req,'add')}</button>
-      </form>
-      <div style="margin-top:15px"><a class="btn" href="/">${t(req,'back')}</a></div>
-    </div></body></html>`);
-});
-app.post('/add',isAdmin,upload.single('image'),(req,res)=>{
-  posts.push({
-    title:req.body.title.trim(),
-    content:req.body.content.trim(),
-    order:+req.body.order,
-    image:`/public/uploads/${req.file.filename}`,
-    date:new Date().toISOString(), likes:0, comments:[]
-  });
-  savePosts(); res.redirect('/');
 });
 
-/* ----------  EDIT ---------- */
-app.get('/edit/:id',isAdmin,(req,res)=>{
-  const id=+req.params.id; if(id<0||id>=posts.length) return res.redirect('/');
-  const p=posts[id];
-  res.send(head(req,' - Edit')+`
-    <div class="container"><h2>${t(req,'edit')}</h2>
-      <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
-        <input name="title"   value="${esc(p.title)}" required>
-        <textarea name="content" rows="4" required>${esc(p.content)}</textarea>
-        <input type="number" name="order" value="${p.order}" required>
-        <img src="${p.image}" style="max-width:100%;margin:10px 0">
-        <input type="file" name="image" accept="image/*">
-        <button class="btn">${t(req,'save')}</button>
-      </form>
-      <div style="margin-top:15px"><a class="btn" href="/">${t(req,'back')}</a></div>
-    </div></body></html>`);
-});
-app.post('/edit/:id',isAdmin,upload.single('image'),(req,res)=>{
-  const id=+req.params.id; if(id<0||id>=posts.length) return res.redirect('/');
-  posts[id].title   = req.body.title.trim();
-  posts[id].content = req.body.content.trim();
-  posts[id].order   = +req.body.order;
-  if(req.file) posts[id].image=`/public/uploads/${req.file.filename}`;
-  savePosts(); res.redirect('/');
+/* ----------  STATIC FILES ---------- */
+app.use(express.static('public'));
+
+/* ----------  JS FOR COMMENTS, MODAL, LIKE ---------- */
+app.get('/script.js', (req,res)=>{
+  res.type('application/javascript');
+  res.send(`
+    function toggleComments(postId){
+      const fullList = document.getElementById('comments-full-' + postId);
+      if(fullList) fullList.style.display = fullList.style.display === 'block' ? 'none' : 'block';
+    }
+    function showModal(imgSrc){
+      let modal = document.getElementById('modal');
+      if(!modal){
+        modal = document.createElement('div');
+        modal.id = 'modal';
+        modal.className = 'modal';
+        modal.onclick = e => {
+          if(e.target.id === 'modal') modal.style.display = 'none';
+        };
+        const img = document.createElement('img');
+        img.id = 'modal-img';
+        modal.appendChild(img);
+        document.body.appendChild(modal);
+      }
+      document.getElementById('modal-img').src = imgSrc;
+      modal.style.display = 'flex';
+    }
+    // delete comment via POST form (simulate)
+    function deleteComment(postId, commIdx){
+      if(confirm('${t({lang:'ua'},'deleteCommentConf')}')){
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/comment/delete/' + postId + '/' + commIdx;
+        document.body.appendChild(form);
+        form.submit();
+      }
+    }
+  `);
 });
 
-/* ----------  DELETE ONE ---------- */
-app.get('/delete/:id',isAdmin,(req,res)=>{
-  const id=+req.params.id; if(id>=0 && id<posts.length){ posts.splice(id,1); savePosts(); }
-  res.redirect('/');
+/* ----------  SERVER START ---------- */
+app.listen(PORT, ()=>{
+  console.log(`Server started on http://localhost:${PORT}`);
 });
-
-/* ----------  DELETE ALL ---------- */
-app.get('/deleteAll',isAdmin,(req,res)=>{ posts=[]; savePosts(); res.redirect('/'); });
-
-/* ----------  SETTINGS ---------- */
-app.get('/settings',isAdmin,(req,res)=>{
-  res.send(head(req,' - Settings')+`
-    <div class="container"><h2>${t(req,'settings')}</h2>
-      <form method="POST" action="/settings">
-        <input name="login"    value="${esc(ADMIN_LOGIN)}" required>
-        <input name="password" value="${esc(ADMIN_PASS)}" required>
-        <button class="btn">${t(req,'save')}</button>
-      </form>
-      <div style="margin-top:15px"><a class="btn" href="/">${t(req,'back')}</a></div>
-    </div></body></html>`);
-});
-app.post('/settings',isAdmin,(req,res)=>{
-  ADMIN_LOGIN=req.body.login.trim(); ADMIN_PASS=req.body.password.trim();
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({login:ADMIN_LOGIN,password:ADMIN_PASS},null,2));
-  res.redirect('/');
-});
-
-/* ----------  START ---------- */
-app.listen(PORT,()=>console.log(`Server running on http://localhost:${PORT}`));
