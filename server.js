@@ -83,154 +83,181 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .modal img{max-height:90%;max-width:90%}
 </style>
 <script>
- function like(idx){
-   fetch('/like/'+idx,{method:'POST',cache:'no-store'})
+ function like(id){
+   fetch('/like/'+id, {method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store'})
      .then(r=>r.json())
-     .then(j=>{document.getElementById('lk'+idx).innerText=j.likes;});
+     .then(j=>{
+       const likeCount = document.getElementById('lk'+id);
+       if(likeCount) likeCount.innerText = j.likes;
+     })
+     .catch(()=>alert('Error liking post'));
  }
- function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
- function sh(i){document.getElementById('m'+i).style.display='flex'}
- function hi(i){document.getElementById('m'+i).style.display='none'}
+
+ function toggleComments(id){
+   const box=document.getElementById('c'+id);
+   const btn=document.getElementById('b'+id);
+   if(!box || !btn) return;
+   if(box.style.display==='block'){
+     box.style.display='none';
+     btn.textContent='${t({session:{lang:req.session.lang||'ua'}},'showComments')}';
+   }
+   else{
+     box.style.display='block';
+     btn.textContent='${t({session:{lang:req.session.lang||'ua'}},'hideComments')}';
+   }
+ }
+
  function confirmDelComment(p,c){
-   if(confirm('${dict.ua.delCommentConf}'))
-     fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())
+   if(confirm('${t({session:{lang:req.session.lang||'ua'}},'delCommentConf')}')){
+     fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload());
+   }
  }
  function submitComment(f){
-   const n=prompt('${dict.ua.namePrompt}');
+   const n=prompt('${t({session:{lang:req.session.lang||'ua'}},'namePrompt')}');
    if(!n)return false;
    const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);
    return true;
  }
- function toggleComments(idx){
-   const box=document.getElementById('c'+idx);
-   const btn=document.getElementById('b'+idx);
-   if(box.style.display==='block'){
-     box.style.display='none';btn.textContent='${dict.ua.showComments}';
-   }else{
-     box.style.display='block';btn.textContent='${dict.ua.hideComments}';
-   }
- }
+ function delAll(){if(confirm('${t({session:{lang:req.session.lang||'ua'}},'conf')}'))location='/deleteAll'}
+ function sh(i){document.getElementById('m'+i).style.display='flex'}
+ function hi(i){document.getElementById('m'+i).style.display='none'}
 </script>
 </head><body>
 <div class="header">
   <div class="header-left"><a class="lang-btn" href="/lang/${req.session.lang==='en'?'ua':'en'}">${t(req,'lang')}</a></div>
   <div class="header-title">${t(req,'title')}</div>
   <div class="header-buttons">
-   ${req.session.admin?`<a href="/add" class="btn">${t(req,'add')}</a>
-    <button class="btn" onclick="delAll()">${t(req,'deleteAll')}</button>
-    <a href="/logout" class="btn">${t(req,'logout')}</a>`:
-    `<a href="/login" class="btn">${t(req,'login')}</a>`}
+    ${req.session.admin?`<button onclick="location='/add'">${t(req,'add')}</button><button onclick="delAll()">${t(req,'deleteAll')}</button><button onclick="location='/logout'">${t(req,'logout')}</button>`:
+      `<button onclick="location='/login'">${t(req,'login')}</button>`}
   </div>
 </div>
-<div class="container">
-${content}
-</div></body></html>`}
+<div class="container">${content}</div></body></html>`;
+}
 
 /* ----------  ROUTES ---------- */
-
-// Home
-app.get('/',(req,res)=>{
- const q=(req.query.search||'').toLowerCase();
- const list=posts.filter(p=>!q||p.title.toLowerCase().includes(q)||p.body.toLowerCase().includes(q));
- const lang=req.session.lang||'ua';
-
- const postsHtml=list.map((p,idx)=>{
-  const date=new Date(p.date).toLocaleString(lang==='ua'?'uk-UA':'en-US',{dateStyle:'medium',timeStyle:'short'});
-  return `<div class="post">
-    <h3>${esc(p.title)}</h3>
-    ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${idx})">`:''}
-    <div class="meta">
-      <span>${date}</span>
-      <button class="like" onclick="like(${idx})">❤️ <span id="lk${idx}">${p.likes||0}</span></button>
-    </div>
-    <p>${esc(p.body)}</p>
-    <button id="b${idx}" class="toggle-btn" onclick="toggleComments(${idx})">${t(req,'showComments')}</button>
-    <div id="c${idx}" class="comments">
-      ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${idx},${j})">×</span>`:''}</p>`).join('')}
-      <form method="POST" action="/comment/${idx}" onsubmit="return submitComment(this)">
-        <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
-        <button>${t(req,'send')}</button>
-      </form>
-    </div>
-    ${req.session.admin?`<div><a href="/edit/${idx}">${t(req,'edit')}</a> | <a href="/delete/${idx}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a></div>`:''}
-    <div id="m${idx}" class="modal" onclick="hi(${idx})"><img src="/public/uploads/${esc(p.img)}"></div>
-  </div>`;}).join('');
-
- res.send(page(req,`
- <form method="GET" style="margin-bottom:20px">
-   <input type="search" name="search" placeholder="${t(req,'search')}" value="${esc(req.query.search||'')}">
-   <button>${t(req,'search')}</button>
- </form>
- ${postsHtml||'<p>No posts</p>'}`));
+app.get('/', (req, res) => {
+  // Фільтр пошуку
+  const q = req.query.q?.toLowerCase() || '';
+  let filtered = posts.filter(p => p.text.toLowerCase().includes(q) || p.title.toLowerCase().includes(q));
+  // Відповідь
+  const postsHtml = filtered.map(p => `
+    <div class="post">
+      <h3>${esc(p.title)}</h3>
+      ${p.image ? `<img src="/public/uploads/${p.image}" alt="${esc(p.title)}" onclick="sh(${p.id})">` : ''}
+      <p>${esc(p.text)}</p>
+      <div class="meta">
+        <button class="like" onclick="like(${p.id})">❤️ <span id="lk${p.id}">${p.likes||0}</span> ${t(req,'likes')}</button>
+        <button class="toggle-btn" id="b${p.id}" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
+      </div>
+      <div class="comments" id="c${p.id}">
+        ${p.comments?.map((c,i) => `
+          <div><b>${esc(c.name)}:</b> ${esc(c.text)}${req.session.admin?` <span class="comment-admin" onclick="confirmDelComment(${p.id},${i})">[x]</span>`:''}</div>
+        `).join('')||''}
+        <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
+          <textarea name="text" placeholder="${t(req,'commentPl')}" required></textarea>
+          <button type="submit">${t(req,'send')}</button>
+        </form>
+      </div>
+    </div>`).join('');
+  res.send(page(req, postsHtml));
 });
 
-// Language switch
-app.get('/lang/:lang',(req,res)=>{if(['ua','en'].includes(req.params.lang))req.session.lang=req.params.lang;res.redirect('back');});
-
-// Login
-app.get('/login',(req,res)=>{if(req.session.admin)return res.redirect('/');
- res.send(page(req,`<form method="POST" action="/login" style="max-width:300px;margin:auto">
- <input name="login" placeholder="Login" required autofocus><input type="password" name="password" placeholder="Password" required>
- <button>${t(req,'login')}</button></form>`,' - Login'));});
-app.post('/login',(req,res)=>{const{login,password}=req.body;
- if(login===ADMIN_LOGIN&&password===ADMIN_PASS){req.session.admin=true;res.redirect('/');}
- else res.send(page(req,`<p style="color:#f66">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`,' - Login'));});
-app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
-
-// Add post
-app.get('/add',isAdmin,(req,res)=>res.send(page(req,`<form method="POST" action="/add" enctype="multipart/form-data" style="max-width:600px;margin:auto">
- <input name="title" placeholder="Title" required><textarea name="body" placeholder="Content" rows="5" required></textarea>
- <input type="file" name="img" accept="image/*"><button>${t(req,'add')}</button></form>`,' - Add')));
-app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
- posts.unshift({title:req.body.title,body:req.body.body,img:req.file?req.file.filename:'',date:Date.now(),likes:0,comments:[]});
- savePosts(posts);res.redirect('/');
+/* Лайк */
+app.post('/like/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  let post = posts.find(p => p.id === id);
+  if (!post) return res.status(404).json({ error: 'Post not found' });
+  post.likes = (post.likes || 0) + 1;
+  savePosts(posts);
+  res.json({ likes: post.likes });
 });
 
-// Edit post
-app.get('/edit/:idx',isAdmin,(req,res)=>{const i=+req.params.idx;if(i<0||i>=posts.length)return res.redirect('/');
- const p=posts[i];
- res.send(page(req,`<form method="POST" action="/edit/${i}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
- <input name="title" value="${esc(p.title)}" required><textarea name="body" rows="5" required>${esc(p.body)}</textarea>
- ${p.img?`<img src="/public/uploads/${esc(p.img)}" style="max-width:200px"><br>`:''}
- <input type="file" name="img" accept="image/*"><br>
- <label>Date:<input type="datetime-local" name="date" value="${new Date(p.date).toISOString().slice(0,16)}"></label><br><br>
- <button>${t(req,'save')}</button></form>`,' - Edit'));});
-app.post('/edit/:idx',isAdmin,upload.single('img'),(req,res)=>{
- const i=+req.params.idx;if(i<0||i>=posts.length)return res.redirect('/');
- const p=posts[i];
- p.title=req.body.title;p.body=req.body.body;
- if(req.file){if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}p.img=req.file.filename;}
- if(req.body.date)p.date=new Date(req.body.date).getTime();
- savePosts(posts);res.redirect('/');
+/* Коментар */
+app.post('/comment/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  let post = posts.find(p => p.id === id);
+  if (!post) return res.redirect('/');
+  const name = req.body.name || 'Anonymous';
+  const text = req.body.text;
+  if(!text) return res.redirect('/');
+  post.comments = post.comments || [];
+  post.comments.push({ name, text });
+  savePosts(posts);
+  res.redirect('/');
 });
 
-// Delete post
-app.get('/delete/:idx',isAdmin,(req,res)=>{const i=+req.params.idx;
- if(i>=0&&i<posts.length){if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}posts.splice(i,1);savePosts(posts);}
- res.redirect('/');
-});
-app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/')});
-
-// Likes
-app.post('/like/:idx',(req,res)=>{
- const i=+req.params.idx;
- if(i>=0&&i<posts.length){posts[i].likes=(posts[i].likes||0)+1;savePosts(posts);return res.json({likes:posts[i].likes});}
- res.sendStatus(404);
+/* Видалення коментаря (адмін) */
+app.post('/comment/delete/:postId/:commentIndex', isAdmin, (req, res) => {
+  const postId = parseInt(req.params.postId);
+  const commentIndex = parseInt(req.params.commentIndex);
+  const post = posts.find(p => p.id === postId);
+  if(post && post.comments && post.comments[commentIndex]){
+    post.comments.splice(commentIndex, 1);
+    savePosts(posts);
+  }
+  res.sendStatus(200);
 });
 
-// Comments
-app.post('/comment/:idx',(req,res)=>{
- const i=+req.params.idx;if(i<0||i>=posts.length)return res.redirect('/');
- const name=req.body.name?esc(req.body.name.trim()):'Anon';
- const body=req.body.comment?esc(req.body.comment.trim()):'';
- if(body){posts[i].comments=posts[i].comments||[];posts[i].comments.push({name,body});savePosts(posts);}
- res.redirect('/');
-});
-app.post('/comment/delete/:pIdx/:cIdx',isAdmin,(req,res)=>{
- const p=+req.params.pIdx,c=+req.params.cIdx;
- if(p>=0&&p<posts.length&&posts[p].comments&&posts[p].comments[c]){posts[p].comments.splice(c,1);savePosts(posts);return res.sendStatus(200);}
- res.sendStatus(404);
+/* Логін */
+app.get('/login', (req, res) => {
+  res.send(page(req, `<form method="POST" action="/login">
+    <input name="login" placeholder="Login" required autofocus>
+    <input name="password" type="password" placeholder="Password" required>
+    <button type="submit">${t(req,'login')}</button>
+  </form>`,' - Login'));
 });
 
-// Server
-app.listen(PORT,()=>console.log('Server running on port '+PORT));
+app.post('/login', (req, res) => {
+  if(req.body.login === ADMIN_LOGIN && req.body.password === ADMIN_PASS){
+    req.session.admin = true;
+    res.redirect('/');
+  } else {
+    res.send(page(req, `<p style="color:red">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`, ' - Login'));
+  }
+});
+
+/* Лог-аут */
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/'));
+});
+
+/* Зміна мови */
+app.get('/lang/:l', (req, res) => {
+  const l = req.params.l;
+  if(['ua','en'].includes(l)) req.session.lang = l;
+  res.redirect('back');
+});
+
+/* Додавання поста (адмін) */
+app.get('/add', isAdmin, (req, res) => {
+  res.send(page(req, `<form method="POST" action="/add" enctype="multipart/form-data">
+    <input name="title" placeholder="Title" required autofocus>
+    <textarea name="text" placeholder="Text" required></textarea>
+    <input type="file" name="image" accept="image/*">
+    <button type="submit">${t(req,'add')}</button>
+  </form>`, ' - Add post'));
+});
+
+app.post('/add', isAdmin, upload.single('image'), (req, res) => {
+  let p = {
+    id: posts.length ? posts[posts.length - 1].id + 1 : 1,
+    title: req.body.title,
+    text: req.body.text,
+    likes: 0,
+    comments: [],
+  };
+  if (req.file) p.image = req.file.filename;
+  posts.push(p);
+  savePosts(posts);
+  res.redirect('/');
+});
+
+/* Видалення всіх постів (адмін) */
+app.get('/deleteAll', isAdmin, (req, res) => {
+  posts = [];
+  savePosts(posts);
+  res.redirect('/');
+});
+
+/* Запуск сервера */
+app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
