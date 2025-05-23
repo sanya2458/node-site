@@ -147,3 +147,6 @@ app.get('/',(req,res)=>{
 app.get('/lang/:lang',(req,res)=>{if(['ua
 ::contentReference[oaicite:0]{index=0}
  
+app.listen(PORT, () => {
+  console.log(`Сервер запущено на http://localhost:${PORT}`);
+});
