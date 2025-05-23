@@ -41,12 +41,12 @@ const dict={
      wrong:'Невірний логін або пароль',back:'Назад',edit:'Редагувати',remove:'Видалити',conf:'Видалити цей пост?',
      commentPl:'Коментар...',send:'Надіслати',settings:'Налаштування',save:'Зберегти',lang:'EN',
      search:'Пошук...',likes:'Лайки',delCommentConf:'Видалити цей коментар?',namePrompt:'Введіть ваше ім\'я',
-     showComments:'Показати коментарі',hideComments:'Сховати коментарі'},
+     showComments:'Показати коментарі',hideComments:'Сховати коментарі',nameReq:'Введіть ім\'я!'},
  en:{title:'Fredllosgram',add:'Add post',deleteAll:'Delete all',logout:'Logout',login:'Login',
      wrong:'Invalid login or password',back:'Back',edit:'Edit',remove:'Delete',conf:'Delete this post?',
      commentPl:'Comment...',send:'Send',settings:'Settings',save:'Save',lang:'UA',
      search:'Search...',likes:'Likes',delCommentConf:'Delete this comment?',namePrompt:'Enter your name',
-     showComments:'Show comments',hideComments:'Hide comments'}
+     showComments:'Show comments',hideComments:'Hide comments',nameReq:'Enter name!'}
 };
 const t=(req,k)=>dict[req.session.lang||'ua'][k];
 const isAdmin=(req,res,next)=>req.session?.admin?next():res.redirect('/');
@@ -71,33 +71,31 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .comment-admin{margin-left:8px;color:#f66;cursor:pointer}
  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);justify-content:center;align-items:center}
  .modal img{max-height:90%;max-width:90%}
- .comments{display:none}
+ .comments-block{display:none;margin-top:10px;}
 </style>
 <script>
  function sh(i){document.getElementById('m'+i).style.display='flex'}
  function hi(i){document.getElementById('m'+i).style.display='none'}
- function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
- function submitComment(f){
+ function toggleComments(id) {
+   const block = document.getElementById('comments-block-' + id);
+   const btn = document.getElementById('comments-btn-' + id);
+   if (block.style.display === 'block') {
+     block.style.display = 'none';
+     btn.textContent = '${dict.ua.showComments}';
+   } else {
+     block.style.display = 'block';
+     btn.textContent = '${dict.ua.hideComments}';
+   }
+ }
+ function submitComment(f) {
    const nameInput = f.querySelector('input[name="name"]');
-   if(!nameInput.value.trim()){
-     alert('${dict.ua.namePrompt}');
+   if (!nameInput.value.trim()) {
+     alert('${dict.ua.nameReq}');
      nameInput.focus();
      return false;
    }
    return true;
  }
- function toggleComments(id){
-   const el = document.getElementById('comments'+id);
-   const btn = document.getElementById('toggleBtn'+id);
-   if(el.style.display==='none'){
-     el.style.display='block';
-     btn.textContent='${dict.ua.hideComments}';
-   }else{
-     el.style.display='none';
-     btn.textContent='${dict.ua.showComments}';
-   }
- }
- function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
 </script>
 </head><body>
 <div class="header">
@@ -105,7 +103,7 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
   <div class="header-title">${t(req,'title')}</div>
   <div class="header-buttons">
    ${req.session.admin?`<a href="/add" class="btn">${t(req,'add')}</a>
-    <button class="btn" onclick="delAll()">${t(req,'deleteAll')}</button>
+    <button class="btn" onclick="if(confirm('${t(req,'conf')}'))location='/deleteAll'">${t(req,'deleteAll')}</button>
     <a href="/logout" class="btn">${t(req,'logout')}</a>`:
     `<a href="/login" class="btn">${t(req,'login')}</a>`}
   </div>
@@ -126,9 +124,9 @@ app.get('/',(req,res)=>{
     ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
     <div class="meta"><span>${date}</span></div>
     <p>${esc(p.body)}</p>
-    <button id="toggleBtn${p.id}" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
-    <div class="comments" id="comments${p.id}">
-      ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
+    <button id="comments-btn-${p.id}" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
+    <div id="comments-block-${p.id}" class="comments-block">
+      ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?` <span class="comment-admin" onclick="if(confirm('${t(req,'delCommentConf')}'))fetch('/comment/delete/${p.id}/${j}',{method:'POST'}).then(()=>location.reload())">×</span>`:''}</p>`).join('')}
       <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
         <input name="name" placeholder="${t(req,'namePrompt')}" required autocomplete="off">
         <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
@@ -144,9 +142,58 @@ app.get('/',(req,res)=>{
  ${postsHtml||'<p>No posts</p>'}`));
 });
 
-app.get('/lang/:lang',(req,res)=>{if(['ua
-::contentReference[oaicite:0]{index=0}
- 
-app.listen(PORT, () => {
-  console.log(`Сервер запущено на http://localhost:${PORT}`);
+app.get('/lang/:lang',(req,res)=>{if(['ua','en'].includes(req.params.lang))req.session.lang=req.params.lang;res.redirect('back');});
+
+app.get('/login',(req,res)=>{if(req.session.admin)return res.redirect('/');
+ res.send(page(req,`<form method="POST" action="/login" style="max-width:300px;margin:auto">
+ <input name="login" placeholder="Login" required autofocus><input type="password" name="password" placeholder="Password" required>
+ <button>${t(req,'login')}</button></form>`,' - Login'));});
+app.post('/login',(req,res)=>{const{login,password}=req.body;
+ if(login===ADMIN_LOGIN&&password===ADMIN_PASS){req.session.admin=true;res.redirect('/');}
+ else res.send(page(req,`<p style="color:#f66">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`,' - Login'));});
+app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
+
+app.get('/add',isAdmin,(req,res)=>res.send(page(req,`<form method="POST" action="/add" enctype="multipart/form-data" style="max-width:600px;margin:auto">
+ <input name="title" placeholder="Title" required><textarea name="body" placeholder="Content" rows="5" required></textarea>
+ <input type="file" name="img" accept="image/*"><button>${t(req,'add')}</button></form>`,' - Add')));
+
+app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
+ const id=posts.length?Math.max(...posts.map(p=>p.id))+1:1;
+ posts.unshift({id,title:req.body.title,body:req.body.body,img:req.file?req.file.filename:'',date:Date.now(),likes:0,comments:[]});
+ savePosts(posts);res.redirect('/');
 });
+
+app.get('/edit/:id',isAdmin,(req,res)=>{const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
+ res.send(page(req,`<form method="POST" action="/edit/${p.id}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
+ <input name="title" value="${esc(p.title)}" required><textarea name="body" rows="5" required>${esc(p.body)}</textarea>
+ ${p.img?`<img src="/public/uploads/${esc(p.img)}" style="max-width:200px"><br>`:''}
+ <input type="file" name="img" accept="image/*"><br>
+ <label>Date:<input type="datetime-local" name="date" value="${new Date(p.date).toISOString().slice(0,16)}"></label><br><br>
+ <button>${t(req,'save')}</button></form>`,' - Edit'));});
+
+app.post('/edit/:id',isAdmin,upload.single('img'),(req,res)=>{
+ const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
+ p.title=req.body.title;p.body=req.body.body;if(req.file){if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}p.img=req.file.filename;}
+ if(req.body.date)p.date=new Date(req.body.date).getTime();savePosts(posts);res.redirect('/');
+});
+
+app.get('/delete/:id',isAdmin,(req,res)=>{const i=posts.findIndex(x=>x.id==req.params.id);if(i>=0){if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}posts.splice(i,1);savePosts(posts);}res.redirect('/');});
+app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/');});
+
+app.post('/comment/:id',(req,res)=>{
+ const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
+ const name=req.body.name?esc(req.body.name.trim()):'Anon';
+ const body=req.body.comment?esc(req.body.comment.trim()):'';
+ if(body && name) {
+   p.comments=p.comments||[];
+   p.comments.push({name,body});
+   savePosts(posts);
+ }
+ res.redirect('/');
+});
+app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
+ const p=posts.find(x=>x.id==req.params.pid);if(!p)return res.sendStatus(404);
+ const i=req.params.cid;p.comments&&p.comments[i]?(p.comments.splice(i,1),savePosts(posts),res.sendStatus(200)):res.sendStatus(404);
+});
+
+app.listen(PORT,()=>console.log('Server running on port '+PORT));
