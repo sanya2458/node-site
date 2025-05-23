@@ -84,17 +84,25 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
 </style>
 <script>
  function like(id){
-   fetch('/like/'+id,{method:'POST'})
-     .then(r=>r.ok?document.getElementById('lk'+id).innerText=parseInt(document.getElementById('lk'+id).innerText)+1:0);
+   fetch('/like/'+id,{method:'POST',cache:'no-store'})
+     .then(r=>r.json())
+     .then(j=>{document.getElementById('lk'+id).innerText=j.likes;});
  }
  function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
  function sh(i){document.getElementById('m'+i).style.display='flex'}
  function hi(i){document.getElementById('m'+i).style.display='none'}
  function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
- function submitComment(f){const n=prompt('${dict.ua.namePrompt}');if(!n)return false;const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);return true}
- function toggleComments(id){const box=document.getElementById('c'+id);const btn=document.getElementById('b'+id);
-  if(box.style.display==='block'){box.style.display='none';btn.textContent='${t(req,'showComments')}'}
-  else{box.style.display='block';btn.textContent='${t(req,'hideComments')}'}
+ function submitComment(f){
+   const n=prompt('${dict.ua.namePrompt}');
+   if(!n)return false;
+   const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);
+   return true;
+ }
+ function toggleComments(id){
+   const box=document.getElementById('c'+id);
+   const btn=document.getElementById('b'+id);
+   if(box.style.display==='block'){box.style.display='none';btn.textContent='${dict.ua.showComments}'}
+   else{box.style.display='block';btn.textContent='${dict.ua.hideComments}'}
  }
 </script>
 </head><body>
@@ -130,12 +138,12 @@ app.get('/',(req,res)=>{
     </div>
     <p>${esc(p.body)}</p>
     <button id="b${p.id}" class="toggle-btn" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
-    <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
-      <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
-      <button>${t(req,'send')}</button>
-    </form>
     <div id="c${p.id}" class="comments">
       ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
+      <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
+        <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
+        <button>${t(req,'send')}</button>
+      </form>
     </div>
     ${req.session.admin?`<div><a href="/edit/${p.id}">${t(req,'edit')}</a> | <a href="/delete/${p.id}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a></div>`:''}
     <div id="m${i}" class="modal" onclick="hi(${i})"><img src="/public/uploads/${esc(p.img)}"></div>
@@ -188,7 +196,10 @@ app.get('/delete/:id',isAdmin,(req,res)=>{const i=posts.findIndex(x=>x.id==req.p
 app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/');});
 
 // Likes
-app.post('/like/:id',(req,res)=>{const p=posts.find(x=>x.id==req.params.id);if(p){p.likes=(p.likes||0)+1;savePosts(posts);res.sendStatus(200);}else res.sendStatus(404);});
+app.post('/like/:id',(req,res)=>{const p=posts.find(x=>x.id==req.params.id);
+ if(p){p.likes=(p.likes||0)+1;savePosts(posts);return res.json({likes:p.likes});}
+ res.sendStatus(404);
+});
 
 // Comments
 app.post('/comment/:id',(req,res)=>{
@@ -203,4 +214,3 @@ app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
 
 // Server
 app.listen(PORT,()=>console.log('Server running on port '+PORT));
-
