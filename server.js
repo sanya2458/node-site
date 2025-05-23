@@ -8,7 +8,6 @@ const path    = require('path');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-/* ----------  DATA & CONFIG  ---------- */
 const DATA_PATH   = path.join(__dirname, 'data');
 const POSTS_FILE  = path.join(DATA_PATH, 'posts.json');
 const CONFIG_FILE = path.join(DATA_PATH, 'config.json');
@@ -26,7 +25,6 @@ let posts = loadPosts();
 
 const { login:ADMIN_LOGIN, password:ADMIN_PASS } = JSON.parse(fs.readFileSync(CONFIG_FILE,'utf-8'));
 
-/* ----------  MULTER ---------- */
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_,__,cb)=>cb(null, UPLOAD_DIR),
@@ -34,12 +32,10 @@ const upload = multer({
   })
 });
 
-/* ----------  APP SETUP ---------- */
 app.use(bodyParser.urlencoded({ extended:true }));
 app.use(session({ secret:'simple-secret', resave:false, saveUninitialized:false }));
 app.use('/public', express.static(path.join(__dirname,'public')));
 
-/* ----------  I18N ---------- */
 const dict={
  ua:{title:'Фредлосграм',add:'Додати пост',deleteAll:'Видалити все',logout:'Вийти',login:'Увійти',
      wrong:'Невірний логін або пароль',back:'Назад',edit:'Редагувати',remove:'Видалити',conf:'Видалити цей пост?',
@@ -53,12 +49,9 @@ const dict={
      showComments:'Show comments',hideComments:'Hide comments'}
 };
 const t=(req,k)=>dict[req.session.lang||'ua'][k];
-
-/* ----------  HELPERS ---------- */
 const isAdmin=(req,res,next)=>req.session?.admin?next():res.redirect('/');
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
 
-/* ----------  PAGE TEMPLATE ---------- */
 function page(req,content,title=''){
 return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -75,27 +68,16 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
  .post{background:#2e3b4e;border-radius:8px;padding:15px;margin-bottom:25px;box-shadow:0 0 10px rgba(0,0,0,.2)}
  .post h3{margin:0 0 10px;color:#d1d9e6}.meta{display:flex;justify-content:space-between;font-size:.85em;color:#9ba8b8;margin-top:8px}
  img{max-width:100%;border-radius:6px;cursor:pointer;margin-bottom:10px}
- .like{background:none;border:none;color:#85b4ff;font-size:1em;cursor:pointer}
- .comments{display:none;margin-top:10px}
  .comment-admin{margin-left:8px;color:#f66;cursor:pointer}
- .toggle-btn{background:none;border:none;color:#85b4ff;cursor:pointer;margin-top:5px}
  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);justify-content:center;align-items:center}
  .modal img{max-height:90%;max-width:90%}
 </style>
 <script>
- function like(id){
-   fetch('/like/'+id,{method:'POST'})
-     .then(r=>r.ok?document.getElementById('lk'+id).innerText=parseInt(document.getElementById('lk'+id).innerText)+1:0);
- }
- function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
  function sh(i){document.getElementById('m'+i).style.display='flex'}
  function hi(i){document.getElementById('m'+i).style.display='none'}
  function confirmDelComment(p,c){if(confirm('${dict.ua.delCommentConf}'))fetch('/comment/delete/'+p+'/'+c,{method:'POST'}).then(()=>location.reload())}
  function submitComment(f){const n=prompt('${dict.ua.namePrompt}');if(!n)return false;const i=document.createElement('input');i.type='hidden';i.name='name';i.value=n;f.appendChild(i);return true}
- function toggleComments(id){const box=document.getElementById('c'+id);const btn=document.getElementById('b'+id);
-  if(box.style.display==='block'){box.style.display='none';btn.textContent='${t(req,'showComments')}'}
-  else{box.style.display='block';btn.textContent='${t(req,'hideComments')}'}
- }
+ function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
 </script>
 </head><body>
 <div class="header">
@@ -112,25 +94,19 @@ return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
 ${content}
 </div></body></html>`}
 
-/* ----------  ROUTES ---------- */
-
-// Home
 app.get('/',(req,res)=>{
  const q=(req.query.search||'').toLowerCase();
- const list=posts.filter(p=>!q||p.title.toLowerCase().includes(q)||p.body.toLowerCase().includes(q));
  const lang=req.session.lang||'ua';
+ const list=posts.filter(p=>!q||p.title.toLowerCase().includes(q)||p.body.toLowerCase().includes(q))
+                 .sort((a,b)=>b.date - a.date);
  const postsHtml=list.map((p,i)=>{
   const date=new Date(p.date).toLocaleString(lang==='ua'?'uk-UA':'en-US',{dateStyle:'medium',timeStyle:'short'});
   return `<div class="post">
     <h3>${esc(p.title)}</h3>
     ${p.img?`<img src="/public/uploads/${esc(p.img)}" alt="img" onclick="sh(${i})">`:''}
-    <div class="meta">
-      <span>${date}</span>
-      <button class="like" onclick="like(${p.id})">❤️ <span id="lk${p.id}">${p.likes||0}</span></button>
-    </div>
+    <div class="meta"><span>${date}</span></div>
     <p>${esc(p.body)}</p>
-    <button id="b${p.id}" class="toggle-btn" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
-    <div id="c${p.id}" class="comments">
+    <div class="comments" style="display:block">
       ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
       <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
         <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
@@ -146,10 +122,8 @@ app.get('/',(req,res)=>{
  ${postsHtml||'<p>No posts</p>'}`));
 });
 
-// Language switch
 app.get('/lang/:lang',(req,res)=>{if(['ua','en'].includes(req.params.lang))req.session.lang=req.params.lang;res.redirect('back');});
 
-// Login
 app.get('/login',(req,res)=>{if(req.session.admin)return res.redirect('/');
  res.send(page(req,`<form method="POST" action="/login" style="max-width:300px;margin:auto">
  <input name="login" placeholder="Login" required autofocus><input type="password" name="password" placeholder="Password" required>
@@ -159,7 +133,6 @@ app.post('/login',(req,res)=>{const{login,password}=req.body;
  else res.send(page(req,`<p style="color:#f66">${t(req,'wrong')}</p><a href="/login">${t(req,'back')}</a>`,' - Login'));});
 app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
 
-// Add post
 app.get('/add',isAdmin,(req,res)=>res.send(page(req,`<form method="POST" action="/add" enctype="multipart/form-data" style="max-width:600px;margin:auto">
  <input name="title" placeholder="Title" required><textarea name="body" placeholder="Content" rows="5" required></textarea>
  <input type="file" name="img" accept="image/*"><button>${t(req,'add')}</button></form>`,' - Add')));
@@ -169,7 +142,6 @@ app.post('/add',isAdmin,upload.single('img'),(req,res)=>{
  savePosts(posts);res.redirect('/');
 });
 
-// Edit post
 app.get('/edit/:id',isAdmin,(req,res)=>{const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
  res.send(page(req,`<form method="POST" action="/edit/${p.id}" enctype="multipart/form-data" style="max-width:600px;margin:auto">
  <input name="title" value="${esc(p.title)}" required><textarea name="body" rows="5" required>${esc(p.body)}</textarea>
@@ -183,14 +155,9 @@ app.post('/edit/:id',isAdmin,upload.single('img'),(req,res)=>{
  if(req.body.date)p.date=new Date(req.body.date).getTime();savePosts(posts);res.redirect('/');
 });
 
-// Delete post
 app.get('/delete/:id',isAdmin,(req,res)=>{const i=posts.findIndex(x=>x.id==req.params.id);if(i>=0){if(posts[i].img)try{fs.unlinkSync(path.join(UPLOAD_DIR,posts[i].img));}catch{}posts.splice(i,1);savePosts(posts);}res.redirect('/');});
 app.get('/deleteAll',isAdmin,(req,res)=>{posts.forEach(p=>{if(p.img)try{fs.unlinkSync(path.join(UPLOAD_DIR,p.img));}catch{}});posts=[];savePosts(posts);res.redirect('/');});
 
-// Likes
-app.post('/like/:id',(req,res)=>{const p=posts.find(x=>x.id==req.params.id);if(p){p.likes=(p.likes||0)+1;savePosts(posts);res.sendStatus(200);}else res.sendStatus(404);});
-
-// Comments
 app.post('/comment/:id',(req,res)=>{
  const p=posts.find(x=>x.id==req.params.id);if(!p)return res.redirect('/');
  const name=req.body.name?esc(req.body.name.trim()):'Anon';const body=req.body.comment?esc(req.body.comment.trim()):'';
@@ -201,5 +168,4 @@ app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
  const i=req.params.cid;p.comments&&p.comments[i]?(p.comments.splice(i,1),savePosts(posts),res.sendStatus(200)):res.sendStatus(404);
 });
 
-// Server
 app.listen(PORT,()=>console.log('Server running on port '+PORT));
