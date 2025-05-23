@@ -1,125 +1,357 @@
-/*  ----------  server.js  (styling fixed) ----------  */
-/*  Функціональність та логіка ті самі.
-    Повернув відступи, стилі input-полів та зробив кнопку EN
-    без фону й справа у шапці.  */
-
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
-const multer  = require('multer');
-const fs      = require('fs');
-const path    = require('path');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* ----------  DATA & CONFIG  ---------- */
-const DATA_PATH   = path.join(__dirname, 'data');
-const POSTS_FILE  = path.join(DATA_PATH, 'posts.json');
-const CONFIG_FILE = path.join(DATA_PATH, 'config.json');
-if (!fs.existsSync(DATA_PATH))        fs.mkdirSync(DATA_PATH);
-if (!fs.existsSync(POSTS_FILE))       fs.writeFileSync(POSTS_FILE, '[]');
-if (!fs.existsSync(CONFIG_FILE))      fs.writeFileSync(CONFIG_FILE,
-  JSON.stringify({ login:'admin', password:'1234' }, null, 2));
+// ────────────────────────────────────────────────
+//   DATA STORAGE (JSON FILE)
+// ────────────────────────────────────────────────
+const DATA_PATH = path.join(__dirname, 'data');
+const POSTS_FILE = path.join(DATA_PATH, 'posts.json');
+if (!fs.existsSync(DATA_PATH)) fs.mkdirSync(DATA_PATH);
 
-const loadPosts  = () => JSON.parse(fs.readFileSync(POSTS_FILE, 'utf-8'));
-const savePosts  = posts => fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
-let posts        = loadPosts();
-let { login:ADMIN_LOGIN, password:ADMIN_PASS } = JSON.parse(fs.readFileSync(CONFIG_FILE,'utf-8'));
+let posts = [];
+if (fs.existsSync(POSTS_FILE)) {
+  posts = JSON.parse(fs.readFileSync(POSTS_FILE, 'utf-8'));
+}
 
-/* ----------  MULTER (uploads/)  ---------- */
+// ────────────────────────────────────────────────
+//   CONFIG
+// ────────────────────────────────────────────────
+const ADMIN_LOGIN = 'admin';
+const ADMIN_PASS = '1234';
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+  secret: 'simple-secret',
+  resave: false,
+  saveUninitialized: false,
+}));
+
+// ────────────────────────────────────────────────
+//   IMAGE UPLOADS
+// ────────────────────────────────────────────────
 const uploadDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive:true });
-const upload = multer({ storage: multer.diskStorage({
-  destination: (_,__,cb)=>cb(null, uploadDir),
-  filename:   (_,f ,cb)=>cb(null, Date.now()+path.extname(f.originalname))
-})});
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
-/* ----------  APP SETUP  ---------- */
-app.use(bodyParser.urlencoded({ extended:true }));
-app.use(session({ secret:'simple-secret', resave:false, saveUninitialized:false }));
-app.use('/public', express.static(path.join(__dirname,'public')));
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + ext);
+  }
+});
+const upload = multer({ storage });
 
-/* ----------  I18N ---------- */
-const dict = {
-  ua:{ title:'Фредлосграм', add:'Додати пост', deleteAll:'Видалити все', logout:'Вийти',
-       login:'Увійти', wrong:'Невірний логін або пароль', back:'Назад',
-       edit:'Редагувати', remove:'Видалити', conf:'Підтвердити видалення?',
-       commentPl:'Коментар...', send:'Надіслати', settings:'Налаштування',
-       save:'Зберегти', lang:'EN', search:'Пошук...', likes:'Лайки' },
-  en:{ title:'Fredllosgram', add:'Add post', deleteAll:'Delete all', logout:'Logout',
-       login:'Login', wrong:'Invalid login or password', back:'Back',
-       edit:'Edit', remove:'Delete', conf:'Delete this post?',
-       commentPl:'Comment...', send:'Send', settings:'Settings',
-       save:'Save', lang:'UA', search:'Search...', likes:'Likes' }
-};
-const t=(req,k)=>dict[(req.session.lang||'ua')][k];
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
-/* ----------  HELPERS ---------- */
-const isAdmin = (req,res,next)=> req.session?.admin ? next() : res.redirect('/login');
-const escape  = s => s.replace(/[&<>"]/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+// ────────────────────────────────────────────────
+//   HELPERS
+// ────────────────────────────────────────────────
+function isAdmin(req, res, next) {
+  if (req.session && req.session.admin) next();
+  else res.redirect('/login');
+}
 
-/* ----------  TEMPLATE HEAD ---------- */
-const head = (req,extra='')=>`
-  <html><head><title>${t(req,'title')}${extra}</title>
+function savePosts() {
+  fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
+}
+
+// ────────────────────────────────────────────────
+//   BASE STYLES (GLOBAL)
+// ────────────────────────────────────────────────
+const baseStyles = `
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body{font-family:'Segoe UI',sans-serif;margin:0;padding:0;background:#1f2a38;color:#fff}
-    .container{max-width:1000px;margin:auto;padding:20px}
-    .header{display:flex;align-items:center;padding:15px;background:#30445c;margin-bottom:20px;position:relative}
-    .header-title{position:absolute;left:50%;transform:translateX(-50%);font-size:1.5em;color:#d1d9e6}
-    .header-buttons{margin-left:auto;display:flex;gap:10px}
-    button,.btn{background:#3f5e8c;color:#fff;border:none;padding:10px 15px;border-radius:4px;cursor:pointer;text-decoration:none}
-    button:hover,.btn:hover{background:#5a7ab0}
-    .lang-btn{background:none;border:none;color:#85b4ff;font-size:1em;padding:0 5px;cursor:pointer}
-    .action{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:25px 0}
-    .post{background:#2e3b4e;border-radius:8px;padding:15px;margin-bottom:25px;box-shadow:0 0 10px rgba(0,0,0,.2)}
-    .post h3{margin:0 0 8px;color:#d1d9e6}
-    .meta{font-size:.8em;color:#9ba8b8;margin-bottom:8px}
-    img{max-width:100%;border-radius:6px;cursor:pointer}
-    .admin{margin-top:10px;font-size:.9em}
-    a{color:#85b4ff;text-decoration:none}
-    a:hover{text-decoration:underline}
-    form.inline{display:inline}
-    input[type=text],input[type=password],input[type=number],textarea{
-      width:100%;padding:10px;border:none;border-radius:4px;background:#3a4a5c;color:#fff;margin-bottom:15px
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #1f2a38;
+      color: #ffffff;
     }
-    .like{border:none;background:none;color:#85b4ff;font-size:1em;cursor:pointer}
-    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);justify-content:center;align-items:center}
-    .modal img{max-height:90%;max-width:90%}
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+    }
+    /* ─────────── HEADER ─────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center; /* centre title horizontally */
+      padding: 15px;
+      background-color: #34445c; /* slightly different colour */
+      position: relative;       /* for absolute‑positioned buttons */
+      margin-bottom: 25px;      /* distance from first post */
+      flex-wrap: wrap;
+    }
+    .header-title {
+      flex: 1;
+      text-align: center;
+      font-size: 1.5em;
+      color: #d1d9e6;
+    }
+    .header-buttons {
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 10px;
+    }
+    /* ─────────── BUTTONS ─────────── */
+    button, .button-link {
+      background-color: #3f5e8c;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      text-decoration: none;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover, .button-link:hover {
+      background-color: #5a7ab0;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #d1d9e6;
+    }
+    .post {
+      background-color: #2e3b4e;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    .post h3 {
+      margin-top: 0;
+      color: #d1d9e6;
+    }
+    .post p {
+      color: #c0cad6;
+    }
+    .admin-controls {
+      margin-top: 10px;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      margin-top: 10px;
+      border-radius: 6px;
+    }
+    a {
+      color: #85b4ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      background-color: #3a4a5c;
+      color: white;
+    }
+    .add-button {
+      text-align: center;
+      margin-top: 20px;
+    }
   </style>
-  <script>
-    function like(id){fetch('/like/'+id).then(()=>location.reload())}
-    function delAll(){if(confirm('${dict.ua.conf}'))location='/deleteAll'}
-    function show(id){document.getElementById('m'+id).style.display='flex'}
-    function hide(id){document.getElementById('m'+id).style.display='none'}
-  </script></head><body>`;
+`;
 
-/* ----------  ROUTES (same logic) ---------- */
-/* ... (код усіх маршрутів не змінився, лише хедер) ... */
+// ────────────────────────────────────────────────
+//   ROUTES
+// ────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  let html = `
+    <html>
+      <head>
+        <title>Фредлосграм</title>
+        ${baseStyles}
+      </head>
+      <body>
+        <div class="header">
+          <div class="header-title">Фредлосграм</div>
+          <div class="header-buttons">
+  `;
 
-/* ----------  HOME (modified header) ---------- */
-app.get('/',(req,res)=>{
-  const q=(req.query.q||'').toLowerCase();
-  const list=posts.filter(p=>!q||p.title.toLowerCase().includes(q)||p.content.toLowerCase().includes(q));
-  let h=head(req);
-
-  h+=`<div class="header"><div class="header-title">${t(req,'title')}</div>
-       <div class="header-buttons">
-         <a class="lang-btn" href="/lang/${req.session.lang==='en'?'ua':'en'}">${t(req,'lang')}</a>`;
-  if(req.session.admin){
-    h+=`<form method="POST" action="/logout" class="inline"><button>${t(req,'logout')}</button></form>`;
-  }else{
-    h+=`<a class="btn" href="/login">${t(req,'login')}</a>`;
+  if (req.session.admin) {
+    html += `
+      <form method="POST" action="/logout" style="margin:0;">
+        <button type="submit">Вийти</button>
+      </form>
+      <a href="/add" class="button-link">Додати пост</a>
+    `;
+  } else {
+    html += `<a href="/login" class="button-link">Увійти</a>`;
   }
-  h+='</div></div>';
 
-  /* rest of content unchanged ... */
-  /* --- action bar, posts rendering etc. (same as previous message) --- */
+  html += `</div></div><div class="container"><h1>Пости</h1>`;
 
-  res.send(h);
+  if (posts.length === 0) {
+    html += `<p>Постів поки що немає.</p>`;
+  } else {
+    posts.forEach((post, i) => {
+      html += `<div class="post">
+        <h3>${post.title}</h3>
+        <p>${post.content}</p>`;
+      if (post.image) {
+        html += `<img src="${post.image}" alt="Image for post">`;
+      }
+      if (req.session.admin) {
+        html += `
+          <div class="admin-controls">
+            <a href="/edit/${i}">Редагувати</a> |
+            <a href="/delete/${i}" onclick="return confirm('Видалити цей пост?')">Видалити</a>
+          </div>`;
+      }
+      html += `</div>`;
+    });
+  }
+
+  html += `</div></body></html>`;
+  res.send(html);
 });
 
-/* ----------  (leave all other routes from previous code unchanged) ---------- */
+app.get('/login', (req, res) => {
+  if (req.session.admin) return res.redirect('/');
+  res.send(`
+    <html>
+      <head>
+        <title>Увійти</title>
+        ${baseStyles}
+      </head>
+      <body>
+        <div class="container">
+          <h2>Увійти як адмін</h2>
+          <form method="POST" action="/login">
+            <div class="form-group">
+              <input type="text" name="login" placeholder="Логін" required>
+            </div>
+            <div class="form-group">
+              <input type="password" name="password" placeholder="Пароль" required>
+            </div>
+            <button type="submit">Увійти</button>
+          </form>
+          <div class="add-button">
+            <a href="/" class="button-link">Назад</a>
+          </div>
+        </div>
+      </body>
+    </html>
+  `);
+});
 
-app.listen(PORT,()=>console.log(`Server running on http://localhost:${PORT}`));
+app.post('/login', (req, res) => {
+  const { login, password } = req.body;
+  if (login === ADMIN_LOGIN && password === ADMIN_PASS) {
+    req.session.admin = true;
+    res.redirect('/');
+  } else {
+    res.send('Невірний логін або пароль. <a href="/login">Спробуйте знову</a>');
+  }
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
+});
+
+app.get('/add', isAdmin, (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>Додати пост</title>
+        ${baseStyles}
+      </head>
+      <body>
+        <div class="container">
+          <h2>Додати пост</h2>
+          <form method="POST" action="/add" enctype="multipart/form-data">
+            <div class="form-group">
+              <input name="title" placeholder="Заголовок" required>
+            </div>
+            <div class="form-group">
+              <textarea name="content" placeholder="Контент" rows="5" required></textarea>
+            </div>
+            <div class="form-group">
+              <input type="file" name="image" accept="image/*" required>
+            </div>
+            <button type="submit">Додати</button>
+          </form>
+          <div class="add-button">
+            <a href="/" class="button-link">Назад</a>
+          </div>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
+app.post('/add', isAdmin, upload.single('image'), (req, res) => {
+  const { title, content } = req.body;
+  if (!req.file) return res.send('Помилка: потрібно завантажити картинку');
+  const imagePath = `/public/uploads/${req.file.filename}`;
+  posts.push({ title, content, image: imagePath });
+  savePosts();
+  res.redirect('/');
+});
+
+app.get('/edit/:id', isAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (id < 0 || id >= posts.length) return res.send('Пост не знайдено.');
+
+  const post = posts[id];
+  res.send(`
+    <html>
+      <head>
+        <title>Редагувати пост</title>
+        ${baseStyles}
+      </head>
+      <body>
+        <div class="container">
+          <h2>Редагувати пост</h2>
+          <form method="POST" action="/edit/${id}" enctype="multipart/form-data">
+            <div class="form-group">
+              <input name="title" value="${post.title}" required>
+            </div>
+            <div class="form-group">
+              <textarea name="content" rows="5" required>${post.content}</textarea>
+            </div>
+            <div class="form-group">
+              Поточна картинка:<br>
+              ${post.image ? `<img src="${post.image}" style="max-width:100%; margin-top:10px;">` : 'Немає картинки'}
+            </div>
+            <div class="form-group">
+              Змінити картинку:<br>
+              <input type="file" name="image" accept="image/*">
+            </div>
+            <button type="submit">Зберегти</button>
+          </form>
+          <div class="add-button">
+            <a href="/" class="button-link">Назад</a>
+          </div>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
+app.post('/edit
