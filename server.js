@@ -1,5 +1,5 @@
 const express = require('express');
-const session = require('express-session');
+const session  = require('express-session');
 const bodyParser = require('body-parser');
 const multer  = require('multer');
 const fs      = require('fs');
@@ -130,12 +130,12 @@ app.get('/',(req,res)=>{
     </div>
     <p>${esc(p.body)}</p>
     <button id="b${p.id}" class="toggle-btn" onclick="toggleComments(${p.id})">${t(req,'showComments')}</button>
+    <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
+      <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
+      <button>${t(req,'send')}</button>
+    </form>
     <div id="c${p.id}" class="comments">
       ${(p.comments||[]).map((c,j)=>`<p>${esc(c.name)}: ${esc(c.body)}${req.session.admin?`<span class="comment-admin" onclick="confirmDelComment(${p.id},${j})">×</span>`:''}</p>`).join('')}
-      <form method="POST" action="/comment/${p.id}" onsubmit="return submitComment(this)">
-        <input name="comment" placeholder="${t(req,'commentPl')}" required autocomplete="off">
-        <button>${t(req,'send')}</button>
-      </form>
     </div>
     ${req.session.admin?`<div><a href="/edit/${p.id}">${t(req,'edit')}</a> | <a href="/delete/${p.id}" onclick="return confirm('${t(req,'conf')}')">${t(req,'remove')}</a></div>`:''}
     <div id="m${i}" class="modal" onclick="hi(${i})"><img src="/public/uploads/${esc(p.img)}"></div>
@@ -203,3 +203,4 @@ app.post('/comment/delete/:pid/:cid',isAdmin,(req,res)=>{
 
 // Server
 app.listen(PORT,()=>console.log('Server running on port '+PORT));
+
