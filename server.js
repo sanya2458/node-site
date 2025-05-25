@@ -37,7 +37,7 @@ app.use(session({ secret:'simple-secret', resave:false, saveUninitialized:false 
 app.use('/public', express.static(path.join(__dirname,'public')));
 
 const dict={
- ua:{title:'Фредлосграм',add:'Додати пост',deleteAll:'Видалити все',logout:'Вийти',login:'Увійти',
+ ua:{title:'Говорить Тернопіль',add:'Додати пост',deleteAll:'Видалити все',logout:'Вийти',login:'Увійти',
      wrong:'Невірний логін або пароль',back:'Назад',edit:'Редагувати',remove:'Видалити',conf:'Видалити цей пост?',
      commentPl:'Коментар...',send:'Надіслати',settings:'Налаштування',save:'Зберегти',lang:'EN',
      search:'Пошук...',likes:'Лайки',delCommentConf:'Видалити цей коментар?',namePrompt:'Введіть ваше ім\'я',
