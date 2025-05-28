@@ -1,113 +1,1052 @@
-const express=require('express'),session=require('express-session'),bcrypt=require('bcrypt'),sqlite=require('sqlite3').verbose(),multer=require('multer'),path=require('path'),fs=require('fs');
-const app=express(),PORT=process.env.PORT||3000,DIR=path.join(__dirname,'uploads');fs.existsSync(DIR)||fs.mkdirSync(DIR);
-app.use(express.urlencoded({extended:true}),express.static('public'),express.static(DIR),session({secret:'secret',resave:false,saveUninitialized:false}));
-const upload=multer({storage:multer.diskStorage({destination:(_,__,cb)=>cb(null,DIR),filename:(_,f,cb)=>cb(null,Date.now()+path.extname(f.originalname))})});
-const db=new sqlite.Database(path.join(__dirname,'shop.db')),
- q=e=>e&&console.error(e);
-/* ---------- helpers ---------- */
-const css=`body{margin:0;padding:0 15px;background:#0a1e4d;color:#fff;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif}nav{display:flex;gap:15px;align-items:center;flex-wrap:wrap;padding:15px;background:#142f6c;border-radius:0 0 10px 10px}nav a{color:#fff;text-decoration:none;padding:8px 12px;border-radius:6px;transition:.3s}nav a:hover{background:#2f4dab}nav .u{margin-left:auto}h1{margin:20px 0 10px}button,input[type=submit]{background:#2f4dab;color:#fff;border:none;padding:8px 16px;margin-top:10px;cursor:pointer;border-radius:8px;font-size:1rem}button:hover,input[type=submit]:hover{background:#4561d6}input,select,textarea{width:100%;max-width:400px;padding:8px;margin:6px 0 10px;border-radius:6px;border:none}input[type=number]{max-width:150px}.err{color:#ff6868;margin-bottom:15px}.c{max-width:960px;margin:20px auto}.p{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}.card{background:#142f6c;border-radius:12px;padding:15px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;transition:.3s}.card:hover{background:#2f4dab}.card img{width:100%;height:140px;object-fit:contain;border-radius:8px;background:#fff}.card .price{font-weight:bold;margin-bottom:8px}.rating{color:gold;font-weight:bold}@media(max-width:600px){nav{gap:10px}nav a{padding:6px 8px;font-size:14px}}`;
-const page=(res,body,{t='Магазин',u=null,a=false,e=null}={})=>res.send(`<!DOCTYPE html><html lang=uk><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${t}</title><style>${css}</style></head><body><nav><a href="/">Головна</a><a href="/categories">Категорії</a>${a?'<a href="/admin">Адмінка</a>':''}<div class=u>${u?`Привіт, <b>${u}</b> | <a href="/logout">Вийти</a>`:`<a href="/login">Вхід</a> | <a href="/register">Реєстрація</a>`}</div></nav><div class=c>${e?`<p class=err>${e}</p>`:''}${body}</div></body></html>`);
-const auth=(req,res,next)=>req.session.userId?next():res.redirect('/login'),adm=(req,res,next)=>req.session.isAdmin?next():res.sendStatus(403);
-/* ---------- DB init ---------- */
-db.serialize(()=>{
- db.run(`CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,username TEXT UNIQUE,password TEXT,is_admin INTEGER DEFAULT 0)`,q);
- db.run(`CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY,name TEXT UNIQUE)`,q);
- db.run(`CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY,name TEXT,description TEXT,price REAL,category_id INTEGER,rating REAL DEFAULT 0,FOREIGN KEY(category_id)REFERENCES categories(id))`,q);
- db.run(`CREATE TABLE IF NOT EXISTS product_images(id INTEGER PRIMARY KEY,product_id INTEGER,filename TEXT,FOREIGN KEY(product_id)REFERENCES products(id))`,q);
- db.run(`CREATE TABLE IF NOT EXISTS reviews(id INTEGER PRIMARY KEY,product_id INTEGER,user_id INTEGER,rating INTEGER,comment TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(product_id)REFERENCES products(id),FOREIGN KEY(user_id)REFERENCES users(id))`,q);
- db.get(`SELECT 1 FROM users WHERE username='admin'`,(err,row)=>{if(!row)bcrypt.hash('admin123',10,(e,h)=>db.run(`INSERT INTO users(username,password,is_admin)VALUES('admin',?,1)`,h,q));});
-});
-/* ---------- ROUTES ---------- */
-// Головна
-app.get('/',(req,res)=>{
- const cat=req.query.category,params=[],where=cat?' WHERE categories.name=?':'';if(cat)params.push(cat);
- const sql=`SELECT products.*,categories.name AS cat,(SELECT AVG(rating) FROM reviews WHERE product_id=products.id) AS r,(SELECT filename FROM product_images WHERE product_id=products.id LIMIT 1) AS img FROM products LEFT JOIN categories ON products.category_id=categories.id${where} ORDER BY products.id DESC`;
- db.all(sql,params,(e,prods)=>{
-  db.all('SELECT name FROM categories ORDER BY name',(e,cats)=>{
-   const opts=['<option value="">Всі категорії</option>',...cats.map(c=>`<option${c.name===cat?' selected':''}>${c.name}</option>`)].join('');
-   const cards=prods.map(p=>`<div class=card onclick="location='/product/${p.id}'"><img src="/uploads/${p.img||'default.png'}" onerror="this.src='/uploads/default.png'"><h3>${p.name}</h3><div class=price>${p.price.toFixed(2)} грн</div><div class=rating>${p.r?p.r.toFixed(1):'—'}</div></div>`).join('');
-   page(res,`<h1>Магазин товарів</h1><form><label>Фільтр:</label><select name=category onchange="this.form.submit()">${opts}</select></form><div class=p>${cards||'<p>Товарів не знайдено.</p>'}</div>`,{u:req.session.username,a:req.session.isAdmin});
-  });
- });
-});
-// Категорії перелік
-app.get('/categories',(req,res)=>db.all('SELECT name FROM categories ORDER BY name',(e,r)=>page(res,`<h1>Категорії</h1><ul>${r.map(c=>`<li><a href="/?category=${encodeURIComponent(c.name)}">${c.name}</a></li>`).join('')}</ul>`,{u:req.session.username,a:req.session.isAdmin})));
-/* ---------- ADMIN ---------- */
-// Панель
-app.get('/admin',adm,(req,res)=>{
- db.all('SELECT * FROM categories ORDER BY name',(e,cats)=>{
-  db.all(`SELECT products.id,products.name,products.price,(SELECT filename FROM product_images WHERE product_id=products.id LIMIT 1) AS img FROM products ORDER BY id DESC`,(e,prods)=>{
-   const catList=cats.map(c=>`<li>${c.name} <a href=/admin/cat/edit/${c.id}>✏️</a> <a href=/admin/cat/del/${c.id} onclick="return confirm('Del?')">🗑️</a></li>`).join('');
-   const prodList=prods.map(p=>`<li><img src=/uploads/${p.img||'default.png'} style="width:40px;vertical-align:middle;border-radius:4px;"> ${p.name} - ${p.price.toFixed(2)} грн <a href=/admin/prod/edit/${p.id}>✏️</a> <a href=/admin/prod/del/${p.id} onclick="return confirm('Del?')">🗑️</a></li>`).join('');
-   const body=`<h1>Адмінка</h1><h2>Категорії</h2><ul>${catList||'—'}</ul><a href=/admin/cat/new><button type=button>Додати категорію</button></a><h2>Товари</h2><ul>${prodList||'—'}</ul><a href=/admin/prod/new><button type=button>Додати товар</button></a>`;
-   page(res,body,{t:'Адмінка',u:req.session.username,a:true});
-  });
- });
-});
-/* --- Категорії CRUD --- */
-app.route('/admin/cat/new').get(adm,(req,res)=>page(res,'<h1>Нова категорія</h1><form method=post><input name=name required><input type=submit value=Додати>',{u:req.session.username,a:true})).post(adm,(req,res)=>db.run('INSERT INTO categories(name)VALUES(?)',[req.body.name.trim()],e=>res.redirect('/admin')));
-app.route('/login')
-  .get((_, res) => page(res, authForm(
-    'Вхід',
-    '/login',
-    `<label>Логін</label><input name="username" required><label>Пароль</label><input name="password" type="password" required>`
-  )))
-  .post((req, res) => {
-    const { username: u, password: p } = req.body;
-    db.get('SELECT * FROM users WHERE username=?', [u], (e, r) => {
-      if (!r) return page(res, '', { e: 'Невірний логін або пароль' });
-      bcrypt.compare(p, r.password, (e, v) => {
-        if (!v) return page(res, '', { e: 'Невірний логін або пароль' });
-        req.session.userId = r.id;
-        req.session.username = r.username;
-        req.session.isAdmin = r.is_admin == 1;
-        res.redirect('/');
-      });
-    });
-  });
+const express = require('express');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const app = express();
 
-app.get('/admin/cat/del/:id',adm,(req,res)=>db.run('DELETE FROM categories WHERE id=?',req.params.id,e=>res.redirect('/admin')));
-/* --- Товари CRUD --- */
-const prodForm=(p={},cats=[],edit=false)=>{
- const opts=cats.map(c=>`<option value=${c.id}${c.id==p.category_id?' selected':''}>${c.name}</option>`).join('');
- return `<h1>${edit?'Редагувати':'Новий'} товар</h1><form method=post enctype=multipart/form-data><label>Назва</label><input name=name value="${p.name||''}" required><label>Опис</label><textarea name=description>${p.description||''}</textarea><label>Ціна</label><input name=price type=number step=0.01 value="${p.price||''}" required><label>Категорія</label><select name=category_id required>${opts}</select><label>Фото (до 5)</label><input type=file name=images multiple accept=image/*><input type=submit value="${edit?'Зберегти':'Додати'}"></form>`;
-};
-app.get('/admin/prod/new',adm,(req,res)=>db.all('SELECT * FROM categories ORDER BY name',(e,cats)=>page(res,prodForm({},cats),{u:req.session.username,a:true})));
-app.post('/admin/prod/new',adm,upload.array('images',5),(req,res)=>{
- const {name,description,price,category_id}=req.body;if(!name||!price)return page(res,'',{e:'Поля обов’язкові',u:req.session.username,a:true});
- db.run('INSERT INTO products(name,description,price,category_id)VALUES(?,?,?,?)',[name,description||'',price,category_id],function(err){
-  if(err)return page(res,'',{e:'Помилка',u:req.session.username,a:true});
-  const pid=this.lastID;req.files.forEach(f=>db.run('INSERT INTO product_images(product_id,filename)VALUES(?,?)',[pid,f.filename]));
-  res.redirect('/admin');
- });
+app.use(express.static('public'));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+  secret: 'supersecretkey',
+  resave: false,
+  saveUninitialized: false,
+}));
+
+// ==== Дані в пам'яті ====
+let users = [
+  { id: 1, username: 'admin', password: 'admin', role: 'admin' }, // admin
+];
+let categories = [];
+let products = [];
+let carts = {}; // key: userId -> [{productId, quantity}]
+
+// ==== Функції допомоги ====
+function isAuth(req) { return req.session.userId != null; }
+function isAdmin(req) {
+  const u = users.find(u => u.id === req.session.userId);
+  return u && u.role === 'admin';
+}
+
+// ==== Роутинг ====
+
+// Головна сторінка - показує всі категорії і товари
+app.get('/', (req, res) => {
+  let user = users.find(u => u.id === req.session.userId);
+  let cartCount = 0;
+  if (user && carts[user.id]) {
+    cartCount = carts[user.id].reduce((a,b) => a+b.quantity, 0);
+  }
+  res.send(`
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Інтернет Магазин</title>
+<style>
+  body {
+    margin: 0; padding: 0; font-family: Arial,sans-serif; background:#121822; color:#cfd8dc;
+  }
+  header {
+    background: #23395d; padding: 1rem; display:flex; justify-content: space-between; align-items: center;
+  }
+  header nav a {
+    color:#cfd8dc; text-decoration:none; margin:0 0.75rem; font-weight:bold;
+    border-radius: 6px; padding: 6px 12px;
+    transition: background 0.3s;
+  }
+  header nav a:hover {
+    background: #395785;
+  }
+  main {
+    max-width: 960px; margin: 1rem auto; padding: 0 1rem;
+  }
+  h1, h2 {
+    color: #bbdefb;
+  }
+  .category-list, .product-list {
+    display: flex; flex-wrap: wrap; gap: 1rem;
+  }
+  .category, .product {
+    background: #1e2a47; border-radius: 10px; padding: 1rem; flex: 1 1 150px; box-sizing: border-box;
+    min-width: 150px; color:#cfd8dc;
+  }
+  .product button {
+    margin-top: 0.5rem; background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 10px; cursor:pointer;
+  }
+  .product button:hover {
+    background:#5472d3;
+  }
+  footer {
+    margin-top: 3rem; text-align:center; font-size:0.8rem; color:#455a64;
+  }
+  /* Адаптивність */
+  @media (max-width: 600px) {
+    header nav {
+      flex-direction: column; align-items: flex-start;
+    }
+    .category-list, .product-list {
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/categories">Категорії</a>
+    ${user ? `<a href="/cart">Кошик (${cartCount})</a>` : ''}
+  </nav>
+  <nav>
+    ${user
+      ? `<span style="margin-right: 1rem;">Привіт, ${user.username}</span><a href="/logout">Вийти</a>`
+      : `<a href="/login">Вхід</a> | <a href="/register">Реєстрація</a>`
+    }
+  </nav>
+</header>
+<main>
+  <h1>Всі товари</h1>
+  <div class="product-list">
+    ${products.length === 0 ? '<p>Товари відсутні</p>' : products.map(p => {
+      const cat = categories.find(c => c.id === p.categoryId);
+      return `<div class="product">
+        <h3>${p.name}</h3>
+        <p><i>${cat ? cat.name : 'Без категорії'}</i></p>
+        <p>Ціна: ${p.price} ₴</p>
+        ${user ? `<form method="POST" action="/cart/add">
+          <input type="hidden" name="productId" value="${p.id}" />
+          <button type="submit">Додати в кошик</button>
+        </form>` : '<small>Увійдіть, щоб купувати</small>'}
+      </div>`;
+    }).join('')}
+  </div>
+
+  ${isAdmin(req) ? `
+  <section style="margin-top: 3rem;">
+    <h2>Адмін Панель</h2>
+    <p>
+      <a href="/admin/categories" style="color:#82b1ff;">Управління категоріями</a> | 
+      <a href="/admin/products" style="color:#82b1ff;">Управління товарами</a>
+    </p>
+  </section>` : ''}
+</main>
+<footer>
+  &copy; 2025 Інтернет Магазин
+</footer>
+</body>
+</html>
+  `);
 });
-app.get('/admin/prod/edit/:id',adm,(req,res)=>{
- db.get('SELECT * FROM products WHERE id=?',[req.params.id],(e,p)=>{
-  db.all('SELECT * FROM categories ORDER BY name',(e,cats)=>{
-   db.all('SELECT * FROM product_images WHERE product_id=?',[p.id],(e,imgs)=>{
-    const imgsHtml=imgs.map(i=>`<div style="display:inline-block;margin:4px"><img src=/uploads/${i.filename} style="width:60px;border-radius:6px"><a href=/admin/img/del/${i.id}?pid=${p.id}>🗑️</a></div>`).join('');
-    page(res,prodForm(p,cats,true)+imgsHtml,{u:req.session.username,a:true});
-   });
+
+// Сторінка реєстрації
+app.get('/register', (req, res) => {
+  if (isAuth(req)) return res.redirect('/');
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Реєстрація</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  form { max-width: 300px; margin: auto; background:#23395d; padding:1rem; border-radius:10px;}
+  label, input {display:block; width: 100%; margin-bottom: 1rem;}
+  input {padding: 8px; border-radius: 6px; border:none;}
+  button {background:#395785; color:#cfd8dc; border:none; padding: 10px; border-radius: 6px; cursor:pointer;}
+  button:hover {background:#5472d3;}
+  a {color:#82b1ff; text-decoration:none;}
+</style>
+</head><body>
+<h2 style="text-align:center;">Реєстрація</h2>
+<form method="POST" action="/register">
+  <label>Логін:<input name="username" required></label>
+  <label>Пароль:<input type="password" name="password" required></label>
+  <button>Зареєструватися</button>
+</form>
+<p style="text-align:center;"><a href="/login">Вже є аккаунт? Вхід</a></p>
+</body></html>
+  `);
+});
+
+app.post('/register', (req, res) => {
+  if (isAuth(req)) return res.redirect('/');
+  const { username, password } = req.body;
+  if (users.find(u => u.username === username)) {
+    return res.send('<p>Користувач з таким логіном вже існує. <a href="/register">Назад</a></p>');
+  }
+  const newUser = { id: users.length + 1, username, password, role: 'user' };
+  users.push(newUser);
+  req.session.userId = newUser.id;
+  res.redirect('/');
+});
+
+// Вхід
+app.get('/login', (req, res) => {
+  if (isAuth(req)) return res.redirect('/');
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Вхід</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  form { max-width: 300px; margin: auto; background:#23395d; padding:1rem; border-radius:10px;}
+  label, input {display:block; width: 100%; margin-bottom: 1rem;}
+  input {padding: 8px; border-radius: 6px; border:none;}
+  button {background:#395785; color:#cfd8dc; border:none; padding: 10px; border-radius: 6px; cursor:pointer;}
+  button:hover {background:#5472d3;}
+  a {color:#82b1ff; text-decoration:none;}
+</style>
+</head><body>
+<h2 style="text-align:center;">Вхід</h2>
+<form method="POST" action="/login">
+  <label>Логін:<input name="username" required></label>
+  <label>Пароль:<input type="password" name="password" required></label>
+  <button>Увійти</button>
+</form>
+<p style="text-align:center;"><a href="/register">Немає аккаунта? Реєстрація</a></p>
+</body></html>
+  `);
+});
+
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find(u => u.username === username && u.password === password);
+  if (!user) {
+    return res.send('<p>Невірний логін або пароль. <a href="/login">Назад</a></p>');
+  }
+  req.session.userId = user.id;
+  res.redirect('/');
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/'));
+});
+
+// Сторінка категорій
+app.get('/categories', (req, res) => {
+  let user = users.find(u => u.id === req.session.userId);
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Категорії</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  header {background:#23395d; padding:1rem; display:flex; justify-content: space-between; align-items:center;}
+  header nav a {color:#cfd8dc; text-decoration:none; margin:0 0.75rem; font-weight:bold; border-radius: 6px; padding: 6px 12px;}
+  header nav a:hover {background: #395785;}
+  main {max-width: 600px; margin: 1rem auto;}
+  ul {list-style:none; padding:0;}
+  li {background:#1e2a47; margin-bottom: 0.75rem; border-radius: 10px; padding: 1rem;}
+  a {color:#82b1ff; text-decoration:none;}
+  a:hover {text-decoration: underline;}
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/categories">Категорії</a>
+  </nav>
+  <nav>
+    ${user ? `<span>Привіт, ${user.username}</span> | <a href="/logout">Вийти</a>` : `<a href="/login">Вхід</a>`}
+  </nav>
+</header>
+<main>
+<h1>Категорії</h1>
+<ul>
+  ${categories.length === 0 ? '<li>Категорії відсутні</li>' : categories.map(c => `<li>${c.name}</li>`).join('')}
+</ul>
+</main>
+</body></html>
+  `);
+});
+
+// Кошик
+app.get('/cart', (req, res) => {
+  if (!isAuth(req)) return res.redirect('/login');
+  let user = users.find(u => u.id === req.session.userId);
+  let cart = carts[user.id] || [];
+  let cartItems = cart.map(ci => {
+    let p = products.find(pr => pr.id === ci.productId);
+    if (!p) return null;
+    return { ...p, quantity: ci.quantity };
+  }).filter(Boolean);
+
+  const total = cartItems.reduce((a, i) => a + i.price * i.quantity, 0);
+
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Кошик</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  header {background:#23395d; padding:1rem; display:flex; justify-content: space-between; align-items:center;}
+  header nav a {color:#cfd8dc; text-decoration:none; margin:0 0.75rem; font-weight:bold; border-radius: 6px; padding: 6px 12px;}
+  header nav a:hover {background: #395785;}
+  main {max-width: 600px; margin: 1rem auto;}
+  table {width: 100%; border-collapse: collapse;}
+  th, td {padding: 8px; border-bottom: 1px solid #395785; text-align:left;}
+  button {
+    background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 10px; cursor:pointer;
+  }
+  button:hover {
+    background:#5472d3;
+  }
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/categories">Категорії</a>
+    <a href="/cart">Кошик</a>
+  </nav>
+  <nav>
+    <span>Привіт, ${user.username}</span> | <a href="/logout">Вийти</a>
+  </nav>
+</header>
+<main>
+<h1>Кошик</h1>
+${cartItems.length === 0 ? '<p>Кошик порожній.</p>' : `
+<table>
+  <thead><tr><th>Товар</th><th>Ціна</th><th>Кількість</th><th>Разом</th><th>Дія</th></tr></thead>
+  <tbody>
+    ${cartItems.map(i => `
+      <tr>
+        <td>${i.name}</td>
+        <td>${i.price} ₴</td>
+        <td>${i.quantity}</td>
+        <td>${i.price * i.quantity} ₴</td>
+        <td>
+          <form style="display:inline;" method="POST" action="/cart/remove">
+            <input type="hidden" name="productId" value="${i.id}" />
+            <button type="submit">Видалити</button>
+          </form>
+        </td>
+      </tr>`).join('')}
+  </tbody>
+  <tfoot>
+    <tr><td colspan="3" style="text-align:right;"><strong>Всього:</strong></td><td colspan="2">${total} ₴</td></tr>
+  </tfoot>
+</table>
+<button onclick="alert('Оплата ще не реалізована')">Оплатити</button>
+`}
+</main>
+</body>
+</html>
+  `);
+});
+
+app.post('/cart/add', (req, res) => {
+  if (!isAuth(req)) return res.redirect('/login');
+  let user = users.find(u => u.id === req.session.userId);
+  const productId = Number(req.body.productId);
+  if (!products.find(p => p.id === productId)) return res.redirect('/');
+
+  if (!carts[user.id]) carts[user.id] = [];
+  let item = carts[user.id].find(ci => ci.productId === productId);
+  if (item) item.quantity++;
+  else carts[user.id].push({ productId, quantity: 1 });
+  res.redirect('back');
+});
+
+app.post('/cart/remove', (req, res) => {
+  if (!isAuth(req)) return res.redirect('/login');
+  let user = users.find(u => u.id === req.session.userId);
+  const productId = Number(req.body.productId);
+  if (!carts[user.id]) return res.redirect('/cart');
+  carts[user.id] = carts[user.id].filter(ci => ci.productId !== productId);
+  res.redirect('/cart');
+});
+
+// === Адмін: Управління категоріями ===
+app.get('/admin/categories', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Адмін - Категорії</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  header {background:#23395d; padding:1rem; display:flex; justify-content: space-between; align-items:center;}
+  header nav a {color:#cfd8dc; text-decoration:none; margin:0 0.75rem; font-weight:bold; border-radius: 6px; padding: 6px 12px;}
+  header nav a:hover {background: #395785;}
+  main {max-width: 600px; margin: 1rem auto;}
+  ul {list-style:none; padding:0;}
+  li {background:#1e2a47; margin-bottom: 0.75rem; border-radius: 10px; padding: 1rem; display:flex; justify-content: space-between; align-items: center;}
+  form {display:inline;}
+  button {
+    background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 10px; cursor:pointer;
+  }
+  button:hover {
+    background:#5472d3;
+  }
+  input[type=text] {
+    padding: 6px; border-radius:6px; border:none; width: 80%;
+    margin-right: 1rem;
+  }
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/admin/categories">Категорії</a>
+    <a href="/admin/products">Товари</a>
+  </nav>
+  <nav>
+    <a href="/logout">Вийти</a>
+  </nav>
+</header>
+<main>
+<h1>Управління категоріями</h1>
+<ul>
+  ${categories.length === 0 ? '<li>Категорії відсутні</li>' : categories.map(c => `
+    <li>
+      <form method="POST" action="/admin/categories/edit" style="flex-grow:1; margin-right: 1rem;">
+        <input type="hidden" name="id" value="${c.id}" />
+        <input type="text" name="name" value="${c.name}" required />
+        <button type="submit">Змінити</button>
+      </form>
+      <form method="POST" action="/admin/categories/delete" onsubmit="return confirm('Видалити категорію?');">
+        <input type="hidden" name="id" value="${c.id}" />
+        <button type="submit">Видалити</button>
+      </form>
+    </li>
+  `).join('')}
+</ul>
+<h2>Додати нову категорію</h2>
+<form method="POST" action="/admin/categories/add">
+  <input type="text" name="name" placeholder="Назва категорії" required />
+  <button>Додати</button>
+</form>
+</main>
+</body>
+</html>
+  `);
+});
+
+app.post('/admin/categories/add', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  const name = req.body.name.trim();
+  if (name) {
+    categories.push({ id: categories.length + 1, name });
+  }
+  res.redirect('/admin/categories');
+});
+
+app.post('/admin/categories/edit', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  const id = Number(req.body.id);
+  const name = req.body.name.trim();
+  let cat = categories.find(c => c.id === id);
+  if (cat && name) {
+    cat.name = name;
+  }
+  res.redirect('/admin/categories');
+});
+
+app.post('/admin/categories/delete', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  const id = Number(req.body.id);
+  categories = categories.filter(c => c.id !== id);
+  // Видалити товари цієї категорії
+  products = products.filter(p => p.categoryId !== id);
+  res.redirect('/admin/categories');
+});
+
+// === Адмін: Управління товарами ===
+app.get('/admin/products', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Адмін - Товари</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  header {background:#23395d; padding:1rem; display:flex; justify-content: space-between; align-items:center;}
+  header nav a {color:#cfd8dc; text-decoration:none; margin:0 0.75rem; font-weight:bold; border-radius: 6px; padding: 6px 12px;}
+  header nav a:hover {background: #395785;}
+  main {max-width: 800px; margin: 1rem auto;}
+  table {width: 100%; border-collapse: collapse;}
+  th, td {padding: 8px; border-bottom: 1px solid #395785; text-align:left;}
+  form {margin: 0;}
+  input[type=text], input[type=number], select {
+    padding: 6px; border-radius:6px; border:none; width: 100%;
+  }
+  button {
+    background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 10px; cursor:pointer;
+  }
+  button:hover {
+    background:#5472d3;
+  }
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/admin/categories">Категорії</a>
+    <a href="/admin/products">Товари</a>
+  </nav>
+  <nav>
+    <a href="/logout">Вийти</a>
+  </nav>
+</header>
+<main>
+<h1>Управління товарами</h1>
+<table>
+  <thead>
+    <tr>
+      <th>Назва</th>
+      <th>Категорія</th>
+      <th>Ціна (₴)</th>
+      <th>Дія</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${products.length === 0 ? `<tr><td colspan="4">Товари відсутні</td></tr>` : products.map(p => {
+      const cat = categories.find(c => c.id === p.categoryId);
+      return `
+      <tr>
+        <form method="POST" action="/admin/products/edit">
+          <td><input type="text" name="name" value="${p.name}" required /></td>
+          <td>
+            <select name="categoryId" required>
+              ${categories.map(c => `<option value="${c.id}" ${c.id === p.categoryId ? 'selected' : ''}>${c.name}</option>`).join('')}
+            </select>
+          </td>
+          <td><input type="number" name="price" value="${p.price}" min="0" required /></td>
+          <td>
+            <input type="hidden" name="id" value="${p.id}" />
+            <button type="submit">Змінити</button>
+        </form>
+        <form method="POST" action="/admin/products/delete" style="display:inline;" onsubmit="return confirm('Видалити товар?');">
+          <input type="hidden" name="id" value="${p.id}" />
+          <button type="submit">Видалити</button>
+        </form>
+          </td>
+      </tr>
+      `;
+    }).join('')}
+  </tbody>
+</table>
+
+<h2>Додати новий товар</h2>
+<form method="POST" action="/admin/products/add" style="max-width: 400px;">
+  <input type="text" name="name" placeholder="Назва товару" required style="margin-bottom: 0.5rem; width: 100%; padding: 6px; border-radius:6px; border:none;" />
+  <select name="categoryId" required style="margin-bottom: 0.5rem; width: 100%; padding: 6px; border-radius:6px; border:none;">
+    <option value="" disabled selected>Оберіть категорію</option>
+    ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+  </select>
+  <input type="number" name="price" placeholder="Ціна" min="0" required style="margin-bottom: 0.5rem; width: 100%; padding: 6px; border-radius:6px; border:none;" />
+  <button>Додати</button>
+</form>
+</main>
+</body>
+</html>
+  `);
+});
+
+app.post('/admin/products/add', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  const { name, categoryId, price } = req.body;
+  if (!name || !categoryId || isNaN(price)) return res.redirect('/admin/products');
+  const catId = Number(categoryId);
+  if (!categories.find(c => c.id === catId)) return res.redirect('/admin/products');
+  products.push({
+    id: products.length + 1,
+    name: name.trim(),
+    categoryId: catId,
+    price: Number(price),
   });
- });
+  res.redirect('/admin/products');
 });
-app.post('/admin/prod/edit/:id',adm,upload.array('images',5),(req,res)=>{
- const{id}=req.params,{name,description,price,category_id}=req.body;
- db.run('UPDATE products SET name=?,description=?,price=?,category_id=? WHERE id=?',[name,description,price,category_id,id],e=>{
-  req.files.forEach(f=>db.run('INSERT INTO product_images(product_id,filename)VALUES(?,?)',[id,f.filename]));
-  res.redirect('/admin');
- });
+
+app.post('/admin/products/edit', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  const { id, name, categoryId, price } = req.body;
+  const productId = Number(id);
+  const catId = Number(categoryId);
+  if (!name || !categoryId || isNaN(price)) return res.redirect('/admin/products');
+  let prod = products.find(p => p.id === productId);
+  if (prod) {
+    prod.name = name.trim();
+    if (categories.find(c => c.id === catId)) prod.categoryId = catId;
+    prod.price = Number(price);
+  }
+  res.redirect('/admin/products');
 });
-app.get('/admin/prod/del/:id',adm,(req,res)=>{
- db.all('SELECT filename FROM product_images WHERE product_id=?',req.params.id,(e,imgs)=>{
-  imgs.forEach(i=>fs.unlink(path.join(DIR,i.filename),()=>{}));
-  db.run('DELETE FROM product_images WHERE product_id=?',req.params.id);db.run('DELETE FROM reviews WHERE product_id=?',req.params.id);db.run('DELETE FROM products WHERE id=?',req.params.id,(e2)=>res.redirect('/admin'));
- });
+
+app.post('/admin/products/delete', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).send('Доступ заборонено');
+  const id = Number(req.body.id);
+  products = products.filter(p => p.id !== id);
+  res.redirect('/admin/products');
 });
-app.get('/admin/img/del/:id',adm,(req,res)=>{
- const pid=req.query.pid;db.get('SELECT filename,product_id FROM product_images WHERE id=?',req.params.id,(e,i)=>{if(i){fs.unlink(path.join(DIR,i.filename),()=>{});db.run('DELETE FROM product_images WHERE id=?',req.params.id,()=>res.redirect(`/admin/prod/edit/${pid}`));}else res.redirect('/admin');});
+
+// === Користувачі: реєстрація, вхід, вихід ===
+app.get('/login', (req, res) => {
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Вхід</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  main {max-width: 400px; margin: 2rem auto; background:#23395d; border-radius: 10px; padding: 1.5rem;}
+  input, button {
+    width: 100%; margin-bottom: 1rem; padding: 0.5rem; border-radius: 6px; border:none;
+  }
+  input {background:#395785; color:#cfd8dc;}
+  button {
+    background:#5472d3; color:#cfd8dc; font-weight: bold; cursor:pointer;
+  }
+  button:hover {background:#395785;}
+  a {color:#a5c1f0; text-decoration:none;}
+  a:hover {text-decoration:underline;}
+  header {background:#23395d; padding:1rem; text-align:center;}
+</style>
+</head><body>
+<header><h1>Вхід</h1></header>
+<main>
+<form method="POST" action="/login">
+  <input type="text" name="username" placeholder="Логін" required autofocus />
+  <input type="password" name="password" placeholder="Пароль" required />
+  <button>Увійти</button>
+</form>
+<p>Немає акаунту? <a href="/register">Зареєструватись</a></p>
+</main>
+</body>
+</html>
+  `);
 });
-/* ---------- AUTH routes (unchanged) ---------- */
-const authForm=(title,action,fields)=>`<h1>${title}</h1><form method=post action=${action}>${fields}<input type=submit value="${title}"></form>`;
-app.route('/register').get((_,res)=>page(res,authForm('Реєстрація','/register','<label>Логін</label><input name=username required pattern="[A-Za-z0-9_]{3,20}"><label>Пароль</label><input name=password type=password required minlength=5>'))).post((req,res)=>{const{username:u,password:p}=req.body;if(!u||!p)return page(res,'',{e:'Заповніть усі поля'});db.get('SELECT 1 FROM users WHERE username=?',[u],(e,r)=>r?page(res,'',{e:'Логін зайнятий'}):bcrypt.hash(p,10,(e,h)=>db.run('INSERT INTO users(username,password)VALUES(?,?)',[u,h],e=>res.redirect('/login'))));});
-app.route('/login').get((_,res)=>page(res,authForm('Вхід','/login','<label>Л
+
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find(u => u.username === username && u.password === password);
+  if (!user) {
+    return res.send('<p>Невірний логін або пароль. <a href="/login">Спробувати ще</a></p>');
+  }
+  req.session.userId = user.id;
+  req.session.isAdmin = user.isAdmin;
+  res.redirect('/');
+});
+
+app.get('/register', (req, res) => {
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Реєстрація</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:1rem;}
+  main {max-width: 400px; margin: 2rem auto; background:#23395d; border-radius: 10px; padding: 1.5rem;}
+  input, button {
+    width: 100%; margin-bottom: 1rem; padding: 0.5rem; border-radius: 6px; border:none;
+  }
+  input {background:#395785; color:#cfd8dc;}
+  button {
+    background:#5472d3; color:#cfd8dc; font-weight: bold; cursor:pointer;
+  }
+  button:hover {background:#395785;}
+  a {color:#a5c1f0; text-decoration:none;}
+  a:hover {text-decoration:underline;}
+  header {background:#23395d; padding:1rem; text-align:center;}
+</style>
+</head><body>
+<header><h1>Реєстрація</h1></header>
+<main>
+<form method="POST" action="/register">
+  <input type="text" name="username" placeholder="Логін" required autofocus />
+  <input type="password" name="password" placeholder="Пароль" required />
+  <button>Зареєструватись</button>
+</form>
+<p>Вже є акаунт? <a href="/login">Увійти</a></p>
+</main>
+</body>
+</html>
+  `);
+});
+
+app.post('/register', (req, res) => {
+  const { username, password } = req.body;
+  if (users.find(u => u.username === username)) {
+    return res.send('<p>Користувач з таким логіном вже існує. <a href="/register">Спробувати інший</a></p>');
+  }
+  users.push({
+    id: users.length + 1,
+    username: username.trim(),
+    password,
+    isAdmin: false,
+  });
+  res.redirect('/login');
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
+});
+
+// === Головна сторінка ===
+app.get('/', (req, res) => {
+  const user = currentUser(req);
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Інтернет-магазин</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:0;}
+  header {
+    background:#23395d;
+    padding: 1rem 2rem;
+    display:flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 0 0 15px 15px;
+  }
+  nav a {
+    color:#cfd8dc;
+    text-decoration:none;
+    margin: 0 1rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 8px 16px;
+  }
+  nav a:hover {
+    background:#395785;
+  }
+  main {max-width: 900px; margin: 2rem auto; padding: 0 1rem;}
+  h1 {margin-bottom: 1rem;}
+  .categories, .products {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .category, .product {
+    background: #1e2a47;
+    border-radius: 12px;
+    padding: 1rem;
+    flex: 1 1 calc(25% - 1rem);
+    box-sizing: border-box;
+    min-width: 150px;
+    color: #cfd8dc;
+  }
+  .product button {
+    background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 10px; cursor:pointer;
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+  .product button:hover {
+    background:#5472d3;
+  }
+  @media(max-width: 700px) {
+    .category, .product {
+      flex: 1 1 calc(50% - 1rem);
+    }
+  }
+  @media(max-width: 400px) {
+    .category, .product {
+      flex: 1 1 100%;
+    }
+  }
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/categories">Категорії</a>
+  </nav>
+  <nav>
+    ${user ? `
+      <a href="/cart">Кошик</a>
+      <a href="/logout">Вийти (${user.username}${user.isAdmin ? ' (адмін)' : ''})</a>
+      ${user.isAdmin ? `<a href="/admin/categories">Адмін панель</a>` : ''}
+    ` : `
+      <a href="/login">Вхід</a>
+      <a href="/register">Реєстрація</a>
+    `}
+  </nav>
+</header>
+<main>
+<h1>Категорії товарів</h1>
+<div class="categories">
+  ${categories.length === 0 ? '<p>Категорії відсутні</p>' : categories.map(c => `
+    <div class="category">
+      <a href="/categories/${c.id}" style="color:#a5c1f0; text-decoration:none;">${c.name}</a>
+    </div>
+  `).join('')}
+</div>
+<h1>Нові товари</h1>
+<div class="products">
+  ${products.slice(-8).map(p => {
+    const cat = categories.find(c => c.id === p.categoryId);
+    return `
+    <div class="product">
+      <strong>${p.name}</strong>
+      <p>Категорія: ${cat ? cat.name : 'Немає'}</p>
+      <p>Ціна: ${p.price} ₴</p>
+      ${user ? `<form method="POST" action="/cart/add">
+        <input type="hidden" name="productId" value="${p.id}" />
+        <button>Додати в кошик</button>
+      </form>` : '<p><em>Увійдіть, щоб додавати в кошик</em></p>'}
+    </div>`;
+  }).join('')}
+</div>
+</main>
+</body>
+</html>
+  `);
+});
+
+// === Перегляд категорії ===
+app.get('/categories', (req, res) => {
+  res.redirect('/');
+});
+
+app.get('/categories/:id', (req, res) => {
+  const catId = Number(req.params.id);
+  const category = categories.find(c => c.id === catId);
+  if (!category) return res.status(404).send('Категорія не знайдена');
+  const prods = products.filter(p => p.categoryId === catId);
+  const user = currentUser(req);
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Категорія: ${category.name}</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:0;}
+  header {
+    background:#23395d;
+    padding: 1rem 2rem;
+    display:flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 0 0 15px 15px;
+  }
+  nav a {
+    color:#cfd8dc;
+    text-decoration:none;
+    margin: 0 1rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 8px 16px;
+  }
+  nav a:hover {
+    background:#395785;
+  }
+  main {max-width: 900px; margin: 2rem auto; padding: 0 1rem;}
+  .products {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .product {
+    background: #1e2a47;
+    border-radius: 12px;
+    padding: 1rem;
+    flex: 1 1 calc(25% - 1rem);
+    box-sizing: border-box;
+    min-width: 150px;
+    color: #cfd8dc;
+  }
+  .product button {
+    background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 10px; cursor:pointer;
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+  .product button:hover {
+    background:#5472d3;
+  }
+  @media(max-width: 700px) {
+    .product {
+      flex: 1 1 calc(50% - 1rem);
+    }
+  }
+  @media(max-width: 400px) {
+    .product {
+      flex: 1 1 100%;
+    }
+  }
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/categories">Категорії</a>
+  </nav>
+  <nav>
+    ${user ? `
+      <a href="/cart">Кошик</a>
+      <a href="/logout">Вийти (${user.username}${user.isAdmin ? ' (адмін)' : ''})</a>
+      ${user.isAdmin ? `<a href="/admin/categories">Адмін панель</a>` : ''}
+    ` : `
+      <a href="/login">Вхід</a>
+      <a href="/register">Реєстрація</a>
+    `}
+  </nav>
+</header>
+<main>
+<h1>Категорія: ${category.name}</h1>
+<div class="products">
+  ${prods.length === 0 ? '<p>Товари відсутні</p>' : prods.map(p => `
+    <div class="product">
+      <strong>${p.name}</strong>
+      <p>Ціна: ${p.price} ₴</p>
+      ${user ? `<form method="POST" action="/cart/add">
+        <input type="hidden" name="productId" value="${p.id}" />
+        <button>Додати в кошик</button>
+      </form>` : '<p><em>Увійдіть, щоб додавати в кошик</em></p>'}
+    </div>
+  `).join('')}
+</div>
+</main>
+</body>
+</html>
+  `);
+});
+
+// === Кошик ===
+app.get('/cart', (req, res) => {
+  const user = currentUser(req);
+  if (!user) return res.redirect('/login');
+  const cart = carts[user.id] || [];
+  const cartItems = cart.map(item => {
+    const prod = products.find(p => p.id === item.productId);
+    return {
+      ...item,
+      product: prod,
+    };
+  }).filter(i => i.product);
+  const total = cartItems.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  res.send(`
+<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Кошик</title>
+<style>
+  body {background:#121822; color:#cfd8dc; font-family: Arial,sans-serif; margin:0; padding:0;}
+  header {
+    background:#23395d;
+    padding: 1rem 2rem;
+    display:flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 0 0 15px 15px;
+  }
+  nav a {
+    color:#cfd8dc;
+    text-decoration:none;
+    margin: 0 1rem;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 8px 16px;
+  }
+  nav a:hover {
+    background:#395785;
+  }
+  main {max-width: 900px; margin: 2rem auto; padding: 0 1rem;}
+  table {
+    width: 100%; border-collapse: collapse;
+  }
+  th, td {
+    padding: 10px; border-bottom: 1px solid #395785; text-align:left;
+  }
+  input[type=number] {
+    width: 60px; padding: 6px; border-radius: 6px; border:none; background:#395785; color:#cfd8dc;
+  }
+  button {
+    background:#395785; border:none; color:#cfd8dc; border-radius:6px;
+    padding: 6px 12px; cursor:pointer;
+  }
+  button:hover {
+    background:#5472d3;
+  }
+</style>
+</head><body>
+<header>
+  <nav>
+    <a href="/">Головна</a>
+    <a href="/categories">Категорії</a>
+  </nav>
+  <nav>
+    <a href="/logout">Вийти (${user.username}${user.isAdmin ? ' (адмін)' : ''})</a>
+  </nav>
+</header>
+<main>
+<h1>Кошик</h1>
+${cartItems.length === 0 ? '<p>Кошик порожній</p>' : `
+<form method="POST" action="/cart/update">
+<table>
+  <thead>
+    <tr><th>Товар</th><th>Ціна (₴)</th><th>Кількість</th><th>Разом (₴)</th><th>Дія</th></tr>
+  </thead>
+  <tbody>
+  ${cartItems.map(i => `
+    <tr>
+      <td>${i.product.name}</td>
+      <td>${i.product.price}</td>
+      <td><input type="number" name="quantities[${i.product.id}]" value="${i.quantity}" min="1" /></td>
+      <td>${i.product.price * i.quantity}</td>
+      <td>
+        <form method="POST" action="/cart/remove" style="margin:0;">
+          <input type="hidden" name="productId" value="${i.product.id}" />
+          <button type="submit">Видалити</button>
+        </form>
+      </td>
+    </tr>
+  `).join('')}
+  </tbody>
+</table>
+<p><strong>Загальна сума: ${total} ₴</strong></p>
+<button>Оновити кількість</button>
+</form>
+`}
+</main>
+</body>
+</html>
+  `);
+});
+
+app.post('/cart/add', (req, res) => {
+  const user = currentUser(req);
+  if (!user) return res.redirect('/login');
+  const productId = Number(req.body.productId);
+  const product = products.find(p => p.id === productId);
+  if (!product) return res.redirect('/');
+  if (!carts[user.id]) carts[user.id] = [];
+  const cart = carts[user.id];
+  const cartItem = cart.find(i => i.productId === productId);
+  if (cartItem) {
+    cartItem.quantity++;
+  } else {
+    cart.push({ productId, quantity: 1 });
+  }
+  res.redirect('back');
+});
+
+app.post('/cart/update', (req, res) => {
+  const user = currentUser(req);
+  if (!user) return res.redirect('/login');
+  const quantities = req.body.quantities || {};
+  const cart = carts[user.id] || [];
+  for (const productIdStr in quantities) {
+    const productId = Number(productIdStr);
+    const quantity = Number(quantities[productIdStr]);
+    if (quantity > 0) {
+      const cartItem = cart.find(i => i.productId === productId);
+      if (cartItem) cartItem.quantity = quantity;
+    }
+  }
+  res.redirect('/cart');
+});
+
+app.post('/cart/remove', (req, res) => {
+  const user = currentUser(req);
+  if (!user) return res.redirect('/login');
+  const productId = Number(req.body.productId);
+  if (!carts[user.id]) return res.redirect('/cart');
+  carts[user.id] = carts[user.id].filter(i => i.productId !== productId);
+  res.redirect('/cart');
+});
+
+function currentUser(req) {
+  const id = req.session.userId;
+  if (!id) return null;
+  return users.find(u => u.id === id) || null;
+}
+
+function isAdmin(req) {
+  return req.session.isAdmin === true;
+}
+
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});
