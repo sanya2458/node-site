@@ -25,7 +25,7 @@ app.get('/',(req,res)=>{
    const opts=['<option value="">Всі категорії</option>',...cats.map(c=>`<option${c.name===cat?' selected':''}>${c.name}</option>`)].join('');
    const cards=prods.map(p=>`<div class=card onclick="location='/product/${p.id}'"><img src="/uploads/${p.id}_1.jpg" onerror="this.src='/uploads/default.png'"><h3>${p.name}</h3><div class=price>${p.price.toFixed(2)} грн</div><div>Категорія: ${p.cat||'Без категорії'}</div><div class=rating>${p.r?p.r.toFixed(1):'—'}</div></div>`).join('');
    page(res,`<h1>Магазин товарів</h1><form><label>Фільтр:</label><select name=category onchange="this.form.submit()">${opts}</select></form><div class=p>${cards||'<p>Товарів не знайдено.</p>'}</div>`,{u:req.session.username,a:req.session.isAdmin});
-  });
+  }); 
  });
 });
 app.get('/categories',(req,res)=>db.all('SELECT name FROM categories ORDER BY name',(e,r)=>page(res,`<h1>Категорії</h1><ul>${r.map(c=>`<li><a href="/?category=${encodeURIComponent(c.name)}">${c.name}</a></li>`).join('')}</ul>`,{u:req.session.username,a:req.session.isAdmin})));
