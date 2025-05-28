@@ -191,6 +191,20 @@ function htmlPage(title, content) {
 }
 
 // --- Маршрут для категорій ---
+app.get('/', (req, res) => {
+  const user = getCurrentUser(req);
+  res.send(htmlPage('Головна', renderHeader(user) + `
+    <main class="centered-content">
+      <h1>Вітаємо в магазині!</h1>
+      <p>Оберіть категорію товарів для перегляду.</p>
+      <ul style="max-width:300px; margin:0 auto; text-align:left;">
+        <li><a href="/category/1">Категорія 1</a></li>
+        <li><a href="/category/2">Категорія 2</a></li>
+      </ul>
+    </main>
+  `));
+});
+
 app.get('/category/:id', (req, res) => {
   const user = getCurrentUser(req);
   const catId = req.params.id;
