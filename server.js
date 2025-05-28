@@ -150,6 +150,8 @@ function render(res, content, options = {}) {
     margin-top: 10px;
     cursor: pointer;
     border-radius: 8px;
+    font-size: 1rem;
+    transition: background 0.3s ease;
   }
   button:hover, input[type=submit]:hover {
     background: #4561d6;
@@ -303,8 +305,9 @@ app.get('/categories', (req, res) => {
   });
 });
 
-// --- Додано: сторінка входу ---
+// --- Логін сторінка (GET) ---
 app.get('/login', (req, res) => {
+  if (req.session.userId) return res.redirect('/');
   const content = `
     <h1>Вхід</h1>
     <form method="POST" action="/login">
@@ -313,32 +316,32 @@ app.get('/login', (req, res) => {
       <label for="password">Пароль:</label>
       <input id="password" name="password" type="password" required />
       <input type="submit" value="Увійти" />
-    </form>
-  `;
+    </form>`;
   render(res, content);
 });
 
+// --- Логін (POST) ---
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
   db.get('SELECT * FROM users WHERE username = ?', [username], (err, user) => {
     if (err) return render(res, '', { error: 'Помилка бази даних' });
-    if (!user) return render(res, '', { error: 'Користувача не знайдено' });
-
+    if (!user) return render(res, '', { error: 'Невірний логін або пароль' });
     bcrypt.compare(password, user.password, (err, result) => {
       if (result) {
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.isAdmin = user.is_admin === 1;
-        return res.redirect('/');
+        res.redirect('/');
       } else {
-        render(res, '', { error: 'Невірний пароль' });
+        render(res, '', { error: 'Невірний логін або пароль' });
       }
     });
   });
 });
 
-// --- Додано: сторінка реєстрації ---
+// --- Реєстрація сторінка (GET) ---
 app.get('/register', (req, res) => {
+  if (req.session.userId) return res.redirect('/');
   const content = `
     <h1>Реєстрація</h1>
     <form method="POST" action="/register">
@@ -349,26 +352,32 @@ app.get('/register', (req, res) => {
       <label for="password2">Підтвердження пароля:</label>
       <input id="password2" name="password2" type="password" required />
       <input type="submit" value="Зареєструватися" />
-    </form>
-  `;
+    </form>`;
   render(res, content);
 });
 
+// --- Реєстрація (POST) ---
 app.post('/register', (req, res) => {
   const { username, password, password2 } = req.body;
-  if (password !== password2) {
+  if (!username || !password || !password2)
+    return render(res, '', { error: 'Заповніть усі поля' });
+  if (password !== password2)
     return render(res, '', { error: 'Паролі не співпадають' });
-  }
+
   bcrypt.hash(password, 10, (err, hash) => {
-    if (err) return render(res, '', { error: 'Помилка хешування' });
-    db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hash], function(err) {
+    if (err) return render(res, '', { error: 'Помилка сервера' });
+
+    db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hash], function (err) {
       if (err) {
-        if (err.code === 'SQLITE_CONSTRAINT') {
+        if (err.message.includes('UNIQUE constraint'))
           return render(res, '', { error: 'Логін вже зайнятий' });
-        }
         return render(res, '', { error: 'Помилка бази даних' });
       }
-      res.redirect('/login');
+      // Автоматичний вхід після реєстрації
+      req.session.userId = this.lastID;
+      req.session.username = username;
+      req.session.isAdmin = false;
+      res.redirect('/');
     });
   });
 });
@@ -382,49 +391,56 @@ app.get('/logout', (req, res) => {
 
 // --- Сторінка товару ---
 app.get('/product/:id', (req, res) => {
-  const id = req.params.id;
-  db.get(`SELECT products.*, categories.name AS category_name,
-    (SELECT AVG(rating) FROM reviews WHERE product_id=products.id) AS avg_rating
-    FROM products
-    LEFT JOIN categories ON products.category_id = categories.id
-    WHERE products.id = ?`, [id], (err, product) => {
+  const productId = req.params.id;
+  db.get(`SELECT products.*, categories.name AS category_name
+          FROM products
+          LEFT JOIN categories ON products.category_id = categories.id
+          WHERE products.id = ?`, [productId], (err, product) => {
     if (err || !product) return res.status(404).send('Товар не знайдено');
 
-    db.all('SELECT filename FROM product_images WHERE product_id = ?', [id], (err, images) => {
+    db.all('SELECT filename FROM product_images WHERE product_id = ?', [productId], (err, images) => {
+      if (err) images = [];
+
       db.all(`SELECT reviews.*, users.username FROM reviews
-        LEFT JOIN users ON reviews.user_id = users.id
-        WHERE product_id = ? ORDER BY created_at DESC`, [id], (err, reviews) => {
+              LEFT JOIN users ON reviews.user_id = users.id
+              WHERE product_id = ? ORDER BY created_at DESC`, [productId], (err, reviews) => {
+        if (err) reviews = [];
 
-        let imagesHtml = images.map(img => `<img src="/uploads/${img.filename}" style="max-width:100%;border-radius:12px;margin-bottom:8px;" />`).join('');
+        const imagesHtml = images.length
+          ? images.map(img => `<img src="/uploads/${img.filename}" style="max-width:100px; margin-right:10px; border-radius:6px;">`).join('')
+          : '<p>Немає зображень</p>';
 
-        let ratingDisplay = product.avg_rating ? product.avg_rating.toFixed(2) : '—';
+        let reviewsHtml = '';
+        if (reviews.length) {
+          reviewsHtml = reviews.map(r => `
+            <div class="review">
+              <strong>${r.username}</strong> — рейтинг: ${r.rating} <br />
+              <p>${r.comment || ''}</p>
+              <small>${new Date(r.created_at).toLocaleString()}</small>
+            </div>`).join('');
+        } else reviewsHtml = '<p>Відгуків поки немає.</p>';
 
-        let reviewsHtml = reviews.map(r => `
-          <div class="review">
-            <strong>${r.username}</strong> — рейтинг: ${r.rating}<br/>
-            ${r.comment ? r.comment : ''}
-          </div>`).join('');
-
-        const content = `
-          <h1>${product.name}</h1>
-          <div>${imagesHtml}</div>
-          <p><b>Ціна:</b> ${product.price.toFixed(2)} грн</p>
-          <p><b>Категорія:</b> ${product.category_name || 'Без категорії'}</p>
-          <p><b>Середній рейтинг:</b> ${ratingDisplay}</p>
-
-          <h2>Відгуки</h2>
-          <div class="reviews">${reviewsHtml || '<p>Відгуків немає.</p>'}</div>
-
-          ${req.session.userId ? `
+        const reviewForm = req.session.userId ? `
           <h3>Додати відгук</h3>
-          <form method="POST" action="/product/${product.id}/review">
+          <form method="POST" action="/product/${productId}/review">
             <label for="rating">Рейтинг (1-5):</label>
             <input id="rating" name="rating" type="number" min="1" max="5" required />
             <label for="comment">Коментар:</label>
-            <textarea id="comment" name="comment"></textarea>
+            <textarea id="comment" name="comment" rows="3"></textarea>
             <input type="submit" value="Додати відгук" />
-          </form>
-          ` : `<p><a href="/login">Увійдіть</a>, щоб залишити відгук.</p>`}
+          </form>` : `<p><a href="/login">Увійдіть</a>, щоб залишити відгук.</p>`;
+
+        const content = `
+          <h1>${product.name}</h1>
+          <p>Категорія: ${product.category_name || 'Без категорії'}</p>
+          <p>Ціна: ${product.price.toFixed(2)} грн</p>
+          <p>${product.description || ''}</p>
+          <div style="margin-bottom:15px;">${imagesHtml}</div>
+          <div class="reviews">
+            <h2>Відгуки</h2>
+            ${reviewsHtml}
+            ${reviewForm}
+          </div>
         `;
 
         render(res, content, { user: req.session.username, isAdmin: req.session.isAdmin });
@@ -433,34 +449,54 @@ app.get('/product/:id', (req, res) => {
   });
 });
 
+// --- Додавання відгуку (POST) ---
 app.post('/product/:id/review', requireAuth, (req, res) => {
-  const id = req.params.id;
-  const userId = req.session.userId;
-  const rating = parseInt(req.body.rating);
-  const comment = req.body.comment || '';
+  const productId = req.params.id;
+  let rating = parseInt(req.body.rating);
+  const comment = req.body.comment ? req.body.comment.trim() : '';
 
-  if (rating < 1 || rating > 5) {
-    return res.redirect(`/product/${id}`);
-  }
+  if (!rating || rating < 1 || rating > 5) return res.status(400).send('Неправильний рейтинг');
 
-  db.run('INSERT INTO reviews (product_id, user_id, rating, comment) VALUES (?, ?, ?, ?)', [id, userId, rating, comment], err => {
-    res.redirect(`/product/${id}`);
+  db.run(`INSERT INTO reviews (product_id, user_id, rating, comment) VALUES (?, ?, ?, ?)`,
+    [productId, req.session.userId, rating, comment],
+    err => {
+      if (err) return res.status(500).send('Помилка додавання відгуку');
+      res.redirect(`/product/${productId}`);
+    });
+});
+
+// --- Адмінка ---
+app.get('/admin', requireAdmin, (req, res) => {
+  db.all('SELECT * FROM products ORDER BY id DESC', [], (err, products) => {
+    if (err) return res.status(500).send('Помилка БД');
+
+    const productRows = products.map(p => `
+      <tr>
+        <td>${p.id}</td>
+        <td>${p.name}</td>
+        <td>${p.price.toFixed(2)}</td>
+        <td>
+          <a href="/admin/product/edit/${p.id}">Редагувати</a> |
+          <a href="/admin/product/delete/${p.id}" onclick="return confirm('Видалити цей товар?')">Видалити</a>
+        </td>
+      </tr>
+    `).join('');
+
+    const content = `
+      <h1>Адмінка</h1>
+      <a href="/admin/product/new"><button type="button">Додати новий товар</button></a>
+      <table border="1" cellpadding="5" cellspacing="0" style="margin-top:15px; width:100%; border-collapse: collapse; color:#fff;">
+        <thead>
+          <tr><th>ID</th><th>Назва</th><th>Ціна</th><th>Дії</th></tr>
+        </thead>
+        <tbody>${productRows}</tbody>
+      </table>
+    `;
+    render(res, content, { user: req.session.username, isAdmin: req.session.isAdmin });
   });
 });
 
-// --- Адмін панель (спрощено) ---
-app.get('/admin', requireAuth, requireAdmin, (req, res) => {
-  const content = `
-    <h1>Адмін панель</h1>
-    <ul>
-      <li><a href="/admin/products">Управління товарами</a></li>
-      <li><a href="/admin/categories">Управління категоріями</a></li>
-    </ul>
-  `;
-  render(res, content, { user: req.session.username, isAdmin: req.session.isAdmin });
-});
-
-// Запуск сервера
+// --- Запуск сервера ---
 app.listen(PORT, () => {
   console.log(`Сервер запущено на http://localhost:${PORT}`);
 });
