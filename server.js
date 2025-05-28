@@ -63,6 +63,33 @@ function getCurrentUser(req) {
 }
 
 // --- Маршрути ---
+app.get('/category/:categoryName', (req, res) => {
+  const user = getCurrentUser(req);
+  const categoryName = req.params.categoryName;
+
+  // Фільтруємо товари за категорією (припускаю, що products - масив товарів з полем category)
+  const filteredProducts = products.filter(p => p.category === categoryName);
+
+  if (filteredProducts.length === 0) {
+    return res.status(404).send(htmlPage('Помилка', renderHeader(user) + `<main><h2>Категорія "${categoryName}" не знайдена</h2></main>`));
+  }
+
+  // Генеруємо HTML списку товарів
+  const productListHtml = filteredProducts.map(p => `
+    <li style="list-style:none; margin-bottom:1rem; border:1px solid #ccc; border-radius:8px; padding:1rem;">
+      <a href="/product/${p.id}" style="text-decoration:none; color:#0f1621; font-weight:bold;">${p.name}</a><br/>
+      Ціна: ${p.price.toFixed(2)} ₴
+    </li>
+  `).join('');
+
+  res.send(htmlPage(`Категорія: ${categoryName}`, renderHeader(user) + `
+    <main>
+      <h2>Категорія: ${categoryName}</h2>
+      <ul style="padding-left:0; max-width:600px; margin:0 auto;">${productListHtml}</ul>
+    </main>
+  `));
+});
+
 
 // Головна сторінка з товарами
 app.get('/', (req, res) => {
@@ -544,18 +571,15 @@ app.post('/admin/product/delete', requireAdmin, (req, res) => {
 // --- Шапка сайту ---
 function renderHeader(user) {
   return `
-  <header style="display:flex; gap:1rem; align-items:center; background:#0f1621; padding:1rem;">
-    <a href="/">Головна</a>
-    <a href="/categories">Категорії</a>
-    ${user ? `
-      <a href="/cart">Кошик</a>
-      ${user.role === 'admin' ? `<a href="/admin">Адмінка</a>` : ''}
-      <a href="/logout">Вийти</a>
-    ` : `
-      <a href="/login">Вхід</a>
-      <a href="/register">Реєстрація</a>
-    `}
-  </header>
+  <header>
+  <nav style="display:flex; justify-content:center; gap:1rem;">
+    <a href="/" style="color:#dde1e7; text-decoration:none; padding:0.5rem 1rem;">Головна</a>
+    <a href="/category/electronics" style="color:#dde1e7; text-decoration:none; padding:0.5rem 1rem;">Електроніка</a>
+    <a href="/category/books" style="color:#dde1e7; text-decoration:none; padding:0.5rem 1rem;">Книги</a>
+    <a href="/category/clothes" style="color:#dde1e7; text-decoration:none; padding:0.5rem 1rem;">Одяг</a>
+  </nav>
+</header>
+
   `;
 }
 
@@ -638,92 +662,215 @@ function htmlPage(title, body) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>
-    /* Основні стилі */
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #121c2a;
-      color: #dde1e7;
-    }
-    header {
-      background: #0f1621;
-      padding: 1rem;
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-    }
-    header a {
-      color: #6ea8fe;
-      text-decoration: none;
-      font-weight: bold;
-    }
-    header a:hover {
-      text-decoration: underline;
-    }
-    main {
-      padding: 1rem;
-    }
-    input, select, textarea, button {
-      font-size: 1rem;
-      margin: 0.3rem 0;
-      padding: 0.5rem;
-      border-radius: 3px;
-      border: none;
-    }
-    button {
-      background: #6ea8fe;
-      color: #121c2a;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #4a6fe0;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-bottom: 1rem;
-      color: #dde1e7;
-    }
-    th, td {
-      border: 1px solid #2a3a58;
-      padding: 0.5rem;
-      text-align: left;
-    }
-    th {
-      background: #1c2a4a;
-    }
-    .products-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
-    }
-    .product-card {
-      background: #1c2a4a;
-      border-radius: 5px;
-      padding: 0.5rem;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .product-card:hover {
-      background: #2a3a58;
-    }
-    .product-card img {
-      max-width: 100%;
-      border-radius: 3px;
-    }
-    .product-images img {
-      max-width: 150px;
-      margin-right: 0.5rem;
-      border-radius: 5px;
-    }
-    .cart-item {
-      background: #1c2a4a;
-      padding: 0.5rem;
-      border-radius: 5px;
-      margin-bottom: 0.5rem;
-    }
-  </style>
+  body {
+    background-color: #f5f7fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #222;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    background-color: #0f1621;
+    padding: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+  }
+
+  header nav {
+    max-width: 600px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  header nav a {
+    color: #dde1e7;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    transition: background-color 0.3s ease;
+  }
+
+  header nav a:hover {
+    background-color: #192734;
+  }
+
+  main {
+    width: 90%;
+    max-width: 600px;
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgb(0 0 0 / 0.1);
+    box-sizing: border-box;
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  h1, h2, h3 {
+    color: #0f1621;
+  }
+
+  form {
+    margin-top: 1rem;
+  }
+
+  label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    color: #0f1621;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    border: 1.5px solid #ccc;
+    box-sizing: border-box;
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color 0.3s ease;
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #0f1621;
+  }
+
+  button {
+    background-color: #0f1621;
+    color: #dde1e7;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    font-family: inherit;
+    margin-top: 0.5rem;
+  }
+
+  button:hover {
+    background-color: #192734;
+  }
+
+  /* Кнопки мінус і плюс для кількості */
+  #addToCartForm {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+
+  #minusBtn, #plusBtn {
+    background-color: #0f1621;
+    color: #dde1e7;
+    border: none;
+    padding: 0.25rem 0.7rem;
+    font-size: 1.2rem;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.3s ease;
+  }
+
+  #minusBtn:hover, #plusBtn:hover {
+    background-color: #192734;
+  }
+
+  #quantityInput {
+    width: 50px;
+    text-align: center;
+    padding: 0.3rem;
+    font-size: 1rem;
+  }
+
+  /* Карусель */
+  #slider {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    overflow: hidden;
+    margin: 0 auto 1rem auto;
+  }
+
+  #slider img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    position: absolute;
+    top: 0;
+    transition: left 0.5s ease;
+  }
+
+  #slider button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #0f1621;
+    color: #dde1e7;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 4px;
+    user-select: none;
+  }
+
+  #prevBtn {
+    left: 5px;
+  }
+
+  #nextBtn {
+    right: 5px;
+  }
+
+  /* Відгуки */
+  #reviews ul {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  #reviews li {
+    border-bottom: 1px solid #ccc;
+    padding: 0.5rem 0;
+    text-align: left;
+  }
+
+  /* Центрування форм і кнопок */
+  form#reviewForm {
+    max-width: 100%;
+  }
+
+  form#reviewForm label {
+    text-align: left;
+  }
+
+  /* Для textarea */
+  textarea {
+    min-height: 60px;
+  }
+</style>
+
 </head>
 <body>
   ${body}
