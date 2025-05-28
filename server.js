@@ -2,361 +2,151 @@ const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
 const sqlite3 = require('sqlite3').verbose();
-const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const multer = require('multer');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
-// --- Автоматичне створення папки для зображень ---
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
 
-// --- Налаштування multer ---
+app.use(session({
+  secret: 'secret_key',
+  resave: false,
+  saveUninitialized: false
+}));
+
+// Підключення БД
+const db = new sqlite3.Database('./shop.db');
+
+// Завантаження зображень через multer
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+  destination: './public/uploads',
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
 });
 const upload = multer({ storage });
 
-// --- База SQLite ---
-const dbFile = path.join(__dirname, 'shop.db');
-const db = new sqlite3.Database(dbFile);
+// --- Функція для рендеру ---
+function render(res, content, options = {}) {
+  const { error, user, isAdmin } = options;
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="uk">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Магазин</title>
+      <style>
+        body { font-family: Arial, sans-serif; background: #222; color: #eee; padding: 20px; }
+        a { color: #66f; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        nav { margin-bottom: 20px; }
+        nav a { margin-right: 15px; }
+        .error { background: #f55; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+        input, textarea, select { width: 100%; padding: 6px; margin-bottom: 10px; border-radius: 4px; border: none; }
+        button, input[type="submit"] { background: #4466ff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+        button:hover, input[type="submit"]:hover { background: #3355dd; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border: 1px solid #555; text-align: left; }
+        .review { background: #333; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+      </style>
+    </head>
+    <body>
+      <nav>
+        <a href="/">Головна</a>
+        ${user ? `<span>Привіт, ${user}!</span> | <a href="/logout">Вихід</a>` : `<a href="/login">Вхід</a> | <a href="/register">Реєстрація</a>`}
+        ${isAdmin ? `| <a href="/admin">Адмінка</a>` : ''}
+      </nav>
 
-// --- Ініціалізація бази ---
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT,
-    is_admin INTEGER DEFAULT 0
-  )`);
+      ${error ? `<div class="error">${error}</div>` : ''}
+      ${content}
+    </body>
+    </html>
+  `);
+}
 
-  db.run(`CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    description TEXT,
-    price REAL,
-    category_id INTEGER,
-    rating REAL DEFAULT 0,
-    FOREIGN KEY(category_id) REFERENCES categories(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS product_images (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER,
-    filename TEXT,
-    FOREIGN KEY(product_id) REFERENCES products(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS reviews (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER,
-    user_id INTEGER,
-    rating INTEGER,
-    comment TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(product_id) REFERENCES products(id),
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  )`);
-
-  // Створюємо адміна, якщо немає
-  const adminUser = 'admin';
-  const adminPass = 'admin123';
-  db.get('SELECT * FROM users WHERE username = ?', [adminUser], (err, row) => {
-    if (!row) {
-      bcrypt.hash(adminPass, 10, (err, hash) => {
-        db.run('INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)', [adminUser, hash]);
-        console.log(`Адмін створений: ${adminUser} / ${adminPass}`);
-      });
-    }
-  });
-});
-
-// --- Middleware ---
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
-app.use('/uploads', express.static(UPLOAD_DIR));
-app.use(session({
-  secret: 'supersecretkey',
-  resave: false,
-  saveUninitialized: false,
-}));
-
-// --- Перевірка авторизації ---
+// --- Middleware для авторизації ---
 function requireAuth(req, res, next) {
   if (!req.session.userId) return res.redirect('/login');
   next();
 }
+
 function requireAdmin(req, res, next) {
   if (!req.session.isAdmin) return res.status(403).send('Доступ заборонено');
   next();
 }
 
-// --- Відправка сторінок з шаблонами (без ejs, чисто HTML у рядках) ---
-function render(res, content, options = {}) {
-  const { title = 'Магазин', user = null, isAdmin = false, error = null } = options;
-  res.send(`<!DOCTYPE html>
-<html lang="uk">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${title}</title>
-<style>
-  /* Базові стилі */
-  body {
-    background: #0a1e4d;
-    color: white;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0; padding: 0 15px;
-  }
-  nav {
-    background: #142f6c;
-    padding: 15px;
-    display: flex;
-    gap: 15px;
-    align-items: center;
-    flex-wrap: wrap;
-    border-radius: 0 0 10px 10px;
-  }
-  nav a {
-    color: white;
-    text-decoration: none;
-    padding: 8px 12px;
-    border-radius: 6px;
-    transition: background 0.3s;
-  }
-  nav a:hover {
-    background: #2f4dab;
-  }
-  nav .user-info {
-    margin-left: auto;
-  }
-  h1 {
-    margin-top: 20px;
-    margin-bottom: 10px;
-  }
-  button, input[type=submit] {
-    background: #2f4dab;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    margin-top: 10px;
-    cursor: pointer;
-    border-radius: 8px;
-    font-size: 1rem;
-    transition: background 0.3s ease;
-  }
-  button:hover, input[type=submit]:hover {
-    background: #4561d6;
-  }
-  input, select, textarea {
-    width: 100%;
-    max-width: 400px;
-    padding: 8px;
-    margin: 6px 0 10px 0;
-    border-radius: 6px;
-    border: none;
-  }
-  input[type=number] {
-    max-width: 150px;
-  }
-  .error {
-    color: #ff6868;
-    margin-bottom: 15px;
-  }
-  .container {
-    max-width: 960px;
-    margin: 20px auto;
-  }
-  .products {
-    display: grid;
-    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
-    gap: 15px;
-  }
-  .product-card {
-    background: #142f6c;
-    border-radius: 12px;
-    padding: 15px;
-    cursor: pointer;
-    transition: background 0.3s;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-  .product-card:hover {
-    background: #2f4dab;
-  }
-  .product-card img {
-    width: 100%;
-    height: 140px;
-    object-fit: contain;
-    border-radius: 8px;
-    background: white;
-  }
-  .product-card h3 {
-    margin: 10px 0 6px 0;
-  }
-  .product-card .price {
-    font-weight: bold;
-    margin-bottom: 8px;
-  }
-  .rating {
-    color: gold;
-    font-weight: bold;
-  }
-  form label {
-    font-weight: bold;
-  }
-  .reviews {
-    margin-top: 20px;
-  }
-  .review {
-    background: #0d204a;
-    padding: 10px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-  }
-  .review strong {
-    color: #a3d1ff;
-  }
-  /* Мобільні налаштування */
-  @media (max-width: 600px) {
-    nav {
-      gap: 10px;
-    }
-    nav a {
-      padding: 6px 8px;
-      font-size: 14px;
-    }
-  }
-</style>
-</head>
-<body>
-<nav>
-  <a href="/">Головна</a>
-  <a href="/categories">Категорії</a>
-  ${isAdmin ? `<a href="/admin">Адмінка</a>` : ''}
-  <div class="user-info">
-  ${user ? `Привіт, <b>${user}</b> | <a href="/logout">Вийти</a>` : `<a href="/login">Вхід</a> | <a href="/register">Реєстрація</a>`}
-  </div>
-</nav>
-<div class="container">
-${error ? `<p class="error">${error}</p>` : ''}
-${content}
-</div>
-</body>
-</html>`);
-}
-
-// --- Головна сторінка, список товарів ---
+// --- Головна ---
 app.get('/', (req, res) => {
-  const filterCat = req.query.category || null;
-  const sqlParams = [];
-  let sql = `SELECT products.*, categories.name AS category_name,
-    (SELECT AVG(rating) FROM reviews WHERE product_id=products.id) AS avg_rating,
-    (SELECT filename FROM product_images WHERE product_id=products.id ORDER BY id ASC LIMIT 1) AS first_img
-    FROM products
-    LEFT JOIN categories ON products.category_id = categories.id`;
-  if (filterCat) {
-    sql += ' WHERE categories.name = ?';
-    sqlParams.push(filterCat);
-  }
-  sql += ' ORDER BY products.id DESC';
+  db.all(`SELECT products.*, categories.name AS category_name 
+          FROM products LEFT JOIN categories ON products.category_id = categories.id 
+          ORDER BY products.id DESC`, [], (err, products) => {
+    if (err) return res.send('Помилка бази даних');
 
-  db.all(sql, sqlParams, (err, products) => {
-    if (err) return res.status(500).send('Помилка бази даних');
+    let productList = products.map(p => `
+      <div style="margin-bottom:15px; padding:10px; background:#333; border-radius:6px;">
+        <h3><a href="/product/${p.id}">${p.name}</a></h3>
+        <p>Категорія: ${p.category_name || 'Без категорії'}</p>
+        <p>Ціна: ${p.price.toFixed(2)} грн</p>
+      </div>
+    `).join('');
 
-    let cards = products.map(p => {
-      let rating = p.avg_rating ? p.avg_rating.toFixed(1) : '—';
-      const imgSrc = p.first_img ? `/uploads/${p.first_img}` : '/uploads/default.png';
-      return `
-        <div class="product-card" onclick="window.location='/product/${p.id}'" title="Переглянути товар">
-          <img src="${imgSrc}" alt="${p.name}" />
-          <h3>${p.name}</h3>
-          <div class="price">${p.price.toFixed(2)} грн</div>
-          <div>Категорія: ${p.category_name || 'Без категорії'}</div>
-          <div class="rating">Рейтинг: ${rating}</div>
-        </div>`;
-    }).join('');
-
-    const content = `
-      <h1>Магазин товарів</h1>
-      <div class="products">${cards || '<p>Товарів не знайдено.</p>'}</div>
-    `;
-
-    render(res, content, { user: req.session.username, isAdmin: req.session.isAdmin });
+    render(res, `<h1>Список товарів</h1>${productList}`, { user: req.session.username, isAdmin: req.session.isAdmin });
   });
 });
 
-// --- Сторінка категорій ---
-app.get('/categories', (req, res) => {
-  db.all('SELECT * FROM categories ORDER BY name', [], (err, categories) => {
-    if (err) return res.status(500).send('Помилка БД');
-    const content = `<h1>Категорії</h1>
-      <ul>${categories.map(c => `<li><a href="/?category=${encodeURIComponent(c.name)}">${c.name}</a></li>`).join('')}</ul>`;
-    render(res, content, { user: req.session.username, isAdmin: req.session.isAdmin });
-  });
-});
-
-// --- Логін сторінка (GET) ---
+// --- Логін ---
 app.get('/login', (req, res) => {
-  if (req.session.userId) return res.redirect('/');
-  const content = `
+  render(res, `
     <h1>Вхід</h1>
     <form method="POST" action="/login">
-      <label for="username">Логін:</label>
-      <input id="username" name="username" type="text" required />
-      <label for="password">Пароль:</label>
-      <input id="password" name="password" type="password" required />
+      <label>Логін:</label>
+      <input name="username" type="text" required />
+      <label>Пароль:</label>
+      <input name="password" type="password" required />
       <input type="submit" value="Увійти" />
-    </form>`;
-  render(res, content);
+    </form>
+  `);
 });
 
-// --- Логін (POST) ---
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
+  if (!username || !password) return render(res, '', { error: 'Заповніть усі поля' });
+
   db.get('SELECT * FROM users WHERE username = ?', [username], (err, user) => {
-    if (err) return render(res, '', { error: 'Помилка бази даних' });
-    if (!user) return render(res, '', { error: 'Невірний логін або пароль' });
-    bcrypt.compare(password, user.password, (err, result) => {
-      if (result) {
+    if (err || !user) return render(res, '', { error: 'Неправильний логін або пароль' });
+
+    bcrypt.compare(password, user.password, (err, same) => {
+      if (same) {
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.isAdmin = user.is_admin === 1;
         res.redirect('/');
       } else {
-        render(res, '', { error: 'Невірний логін або пароль' });
+        render(res, '', { error: 'Неправильний логін або пароль' });
       }
     });
   });
 });
 
-// --- Реєстрація сторінка (GET) ---
+// --- Реєстрація ---
 app.get('/register', (req, res) => {
-  if (req.session.userId) return res.redirect('/');
-  const content = `
+  render(res, `
     <h1>Реєстрація</h1>
     <form method="POST" action="/register">
-      <label for="username">Логін:</label>
-      <input id="username" name="username" type="text" required />
-      <label for="password">Пароль:</label>
-      <input id="password" name="password" type="password" required />
-      <label for="password2">Підтвердження пароля:</label>
-      <input id="password2" name="password2" type="password" required />
+      <label>Логін:</label>
+      <input name="username" type="text" required />
+      <label>Пароль:</label>
+      <input name="password" type="password" required />
+      <label>Підтвердження пароля:</label>
+      <input name="password2" type="password" required />
       <input type="submit" value="Зареєструватися" />
-    </form>`;
-  render(res, content);
+    </form>
+  `);
 });
 
-// --- Реєстрація (POST) ---
 app.post('/register', (req, res) => {
   const { username, password, password2 } = req.body;
   if (!username || !password || !password2)
@@ -373,7 +163,6 @@ app.post('/register', (req, res) => {
           return render(res, '', { error: 'Логін вже зайнятий' });
         return render(res, '', { error: 'Помилка бази даних' });
       }
-      // Автоматичний вхід після реєстрації
       req.session.userId = this.lastID;
       req.session.username = username;
       req.session.isAdmin = false;
@@ -484,7 +273,8 @@ app.get('/admin', requireAdmin, (req, res) => {
 
     const content = `
       <h1>Адмінка</h1>
-      <a href="/admin/product/new"><button type="button">Додати новий товар</button></a>
+      <a href="/admin/category/new"><button type="button">Додати категорію</button></a>
+      <a href="/admin/product/new"><button type="button">Додати товар</button></a>
       <table border="1" cellpadding="5" cellspacing="0" style="margin-top:15px; width:100%; border-collapse: collapse; color:#fff;">
         <thead>
           <tr><th>ID</th><th>Назва</th><th>Ціна</th><th>Дії</th></tr>
@@ -494,6 +284,84 @@ app.get('/admin', requireAdmin, (req, res) => {
     `;
     render(res, content, { user: req.session.username, isAdmin: req.session.isAdmin });
   });
+});
+
+// --- Форма додавання категорії ---
+app.get('/admin/category/new', requireAdmin, (req, res) => {
+  render(res, `
+    <h1>Додати категорію</h1>
+    <form method="POST" action="/admin/category/new">
+      <label>Назва категорії:</label>
+      <input name="name" type="text" required />
+      <input type="submit" value="Додати" />
+    </form>
+  `, { user: req.session.username, isAdmin: req.session.isAdmin });
+});
+
+app.post('/admin/category/new', requireAdmin, (req, res) => {
+  const name = req.body.name.trim();
+  if (!name) return render(res, '', { error: 'Вкажіть назву категорії' });
+
+  db.run('INSERT INTO categories (name) VALUES (?)', [name], (err) => {
+    if (err) return render(res, '', { error: 'Помилка додавання категорії' });
+    res.redirect('/admin');
+  });
+});
+
+// --- Форма додавання товару ---
+app.get('/admin/product/new', requireAdmin, (req, res) => {
+  db.all('SELECT * FROM categories ORDER BY name', [], (err, categories) => {
+    if (err) categories = [];
+
+    let categoriesOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    if (!categoriesOptions) categoriesOptions = '<option value="">Категорії відсутні</option>';
+
+    render(res, `
+      <h1>Додати товар</h1>
+      <form method="POST" action="/admin/product/new" enctype="multipart/form-data">
+        <label>Назва:</label>
+        <input name="name" type="text" required />
+        <label>Опис:</label>
+        <textarea name="description" rows="4"></textarea>
+        <label>Ціна:</label>
+        <input name="price" type="number" step="0.01" required />
+        <label>Категорія:</label>
+        <select name="category_id" required>
+          ${categoriesOptions}
+        </select>
+        <label>Зображення (можна кілька):</label>
+        <input type="file" name="images" accept="image/*" multiple />
+        <input type="submit" value="Додати товар" />
+      </form>
+    `, { user: req.session.username, isAdmin: req.session.isAdmin });
+  });
+});
+
+app.post('/admin/product/new', requireAdmin, upload.array('images', 5), (req, res) => {
+  const { name, description, price, category_id } = req.body;
+
+  if (!name || !price || !category_id) {
+    return render(res, '', { error: 'Заповніть всі обов\'язкові поля' });
+  }
+
+  db.run(`INSERT INTO products (name, description, price, category_id) VALUES (?, ?, ?, ?)`,
+    [name.trim(), description.trim(), parseFloat(price), parseInt(category_id)], function (err) {
+      if (err) return render(res, '', { error: 'Помилка додавання товару' });
+
+      const productId = this.lastID;
+
+      if (req.files && req.files.length > 0) {
+        const stmt = db.prepare('INSERT INTO product_images (product_id, filename) VALUES (?, ?)');
+        for (const file of req.files) {
+          stmt.run(productId, file.filename);
+        }
+        stmt.finalize(() => {
+          res.redirect('/admin');
+        });
+      } else {
+        res.redirect('/admin');
+      }
+    });
 });
 
 // --- Запуск сервера ---
