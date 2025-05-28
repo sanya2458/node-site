@@ -228,7 +228,46 @@ app.get('/admin', requireAdmin, (req, res) => {
       </td>
     </tr>
   `).join('');
+  
+// Форма реєстрації
+app.get('/register', (req, res) => {
+  res.send(htmlPage('Реєстрація', renderHeader(null) + `
+    <main>
+      <h2>Реєстрація</h2>
+      <form method="POST" action="/register">
+        <input name="username" placeholder="Логін" required />
+        <input name="password" type="password" placeholder="Пароль" required />
+        <button type="submit">Зареєструватися</button>
+      </form>
+    </main>
+  `));
+});
 
+  // Обробка реєстрації
+app.post('/register', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.redirect('/register');
+  }
+  if (users.find(u => u.username === username)) {
+    return res.send(htmlPage('Реєстрація', renderHeader(null) + `
+      <main>
+        <h2>Реєстрація</h2>
+        <p style="color:red;">Користувач з таким логіном вже існує</p>
+        <form method="POST" action="/register">
+          <input name="username" placeholder="Логін" required />
+          <input name="password" type="password" placeholder="Пароль" required />
+          <button type="submit">Зареєструватися</button>
+        </form>
+      </main>
+    `));
+  }
+  // Додаємо користувача з роллю user
+  users.push({ id: users.length ? users[users.length-1].id + 1 : 1, username, password, role: 'user' });
+  res.redirect('/login');
+});
+
+  
   // Товари у таблиці
   const productsHtml = products.map(p => `
     <tr>
@@ -386,20 +425,90 @@ app.post('/admin/product/delete', requireAdmin, (req, res) => {
 // --- Шапка сайту ---
 function renderHeader(user) {
   return `
-  <header>
+  <header style="display:flex; gap:1rem; align-items:center; background:#0f1621; padding:1rem;">
     <a href="/">Головна</a>
     <a href="/categories">Категорії</a>
     ${user ? `
-      <span style="color:#dde1e7;">Привіт, ${user.username}</span>
       <a href="/cart">Кошик</a>
       ${user.role === 'admin' ? `<a href="/admin">Адмінка</a>` : ''}
       <a href="/logout">Вийти</a>
     ` : `
       <a href="/login">Вхід</a>
+      <a href="/register">Реєстрація</a>
     `}
   </header>
   `;
 }
+
+// --- Детальна сторінка товару з каруселлю ---
+app.get('/product/:id', (req, res) => {
+  const user = getCurrentUser(req);
+  const prodId = Number(req.params.id);
+  const p = products.find(x => x.id === prodId);
+  if (!p) return res.status(404).send('Товар не знайдено');
+
+  // Створюємо HTML для слайдера картинок з кнопками
+  const sliderHtml = `
+    <div id="slider" style="position:relative; width:300px; height:300px; overflow:hidden; margin-bottom:1rem;">
+      ${p.images.map((img, i) => `
+        <img src="/public/uploads/${img}" alt="${p.name}" style="
+          width:100%;
+          height:100%;
+          object-fit:contain;
+          position:absolute;
+          top:0;
+          left: ${i === 0 ? '0' : '100%'};
+          transition: left 0.5s ease;
+        " data-index="${i}" />
+      `).join('')}
+      <button id="prevBtn" style="
+        position:absolute; top:50%; left:5px; transform: translateY(-50%);
+        background:#0f1621; color:#dde1e7; border:none; padding:0.5rem; cursor:pointer;">&#8592;</button>
+      <button id="nextBtn" style="
+        position:absolute; top:50%; right:5px; transform: translateY(-50%);
+        background:#0f1621; color:#dde1e7; border:none; padding:0.5rem; cursor:pointer;">&#8594;</button>
+    </div>
+  `;
+
+  const reviewsHtml = p.reviews.length ? `<ul>${p.reviews.map(r => `<li>${r}</li>`).join('')}</ul>` : '<p>Відгуків немає</p>';
+
+  res.send(htmlPage(p.name, renderHeader(user) + `
+    <main>
+      <h2>${p.name}</h2>
+      ${sliderHtml}
+      <p><b>Ціна:</b> ${p.price.toFixed(2)} ₴</p>
+      <p><b>Рейтинг:</b> ${p.rating.toFixed(1)} / 5</p>
+      <p><b>Опис:</b><br/>${p.description || 'Немає опису'}</p>
+      <p><b>Відгуки:</b>${reviewsHtml}</p>
+
+      <form method="POST" action="/cart/add">
+        <input type="hidden" name="productId" value="${p.id}" />
+        <label>Кількість: <input type="number" name="quantity" value="1" min="1" required /></label>
+        <button type="submit">Додати до кошика</button>
+      </form>
+
+      <script>
+        (() => {
+          const imgs = [...document.querySelectorAll('#slider img')];
+          let current = 0;
+          const showSlide = (index) => {
+            imgs.forEach((img, i) => {
+              img.style.left = (i === index ? '0' : '100%');
+            });
+          };
+          document.getElementById('prevBtn').onclick = () => {
+            current = (current - 1 + imgs.length) % imgs.length;
+            showSlide(current);
+          };
+          document.getElementById('nextBtn').onclick = () => {
+            current = (current + 1) % imgs.length;
+            showSlide(current);
+          };
+        })();
+      </script>
+    </main>
+  `));
+});
 
 // --- HTML шаблон ---
 function htmlPage(title, body) {
