@@ -1,16 +1,18 @@
 {
   "name": "onestore",
   "version": "1.0.0",
+  "description": "Single-file electronics shop",
   "main": "app.js",
-  "scripts": { "start": "node server.js" },
-
-  // додали engines, щоб Render узяв звичний LTS Node 20
-  "engines": { "node": ">=20" },
-
+  "scripts": {
+    "start": "node app.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "express": "^4.19.2",
     "express-session": "^1.17.3",
     "body-parser": "^1.20.2",
-    "multer": "^1.4.5-lts"   // ← було "^1.4.5"
+    "multer": "^1.4.5-lts.1"
   }
 }
