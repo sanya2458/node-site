@@ -25,20 +25,70 @@ app.get('/',(req,res)=>{
  db.all(sql,params,(e,prods)=>{
   db.all('SELECT name FROM categories ORDER BY name',(e,cats)=>{
    const opts=['<option value="">Всі категорії</option>',...cats.map(c=>`<option${c.name===cat?' selected':''}>${c.name}</option>`)].join('');
-   const cards=prods.map(p=>`<div class=card onclick="location='/product/${p.id}'"><img src="/uploads/${p.img||'default.png'}" onerror="this.src='/uploads/default.png'"><h3>${p.name}</h3><div class=price>${p.price.toFixed(2)} грн</div><div>Категорія: ${p.cat||'Без категорії'}</div><div class=rating>${p.r?p.r.toFixed(1):'—'}</div></div>`).join('');
+   const cards=prods.map(p=>`<div class=card onclick="location='/product/${p.id}'"><img src="/uploads/${p.img||'default.png'}" onerror="this.src='/uploads/default.png'"><h3>${p.name}</h3><div class=price>${p.price.toFixed(2)} грн</div><div class=rating>${p.r?p.r.toFixed(1):'—'}</div></div>`).join('');
    page(res,`<h1>Магазин товарів</h1><form><label>Фільтр:</label><select name=category onchange="this.form.submit()">${opts}</select></form><div class=p>${cards||'<p>Товарів не знайдено.</p>'}</div>`,{u:req.session.username,a:req.session.isAdmin});
   });
  });
 });
-// Категорії
+// Категорії перелік
 app.get('/categories',(req,res)=>db.all('SELECT name FROM categories ORDER BY name',(e,r)=>page(res,`<h1>Категорії</h1><ul>${r.map(c=>`<li><a href="/?category=${encodeURIComponent(c.name)}">${c.name}</a></li>`).join('')}</ul>`,{u:req.session.username,a:req.session.isAdmin})));
-// Адмінка (мінімально, щоб не було Cannot GET)
-app.get('/admin',adm,(req,res)=>page(res,'<h1>Панель адміністратора</h1><p>Функціонал буде додано пізніше.</p>',{t:'Адмінка',u:req.session.username,a:true}));
-// Форми auth
+/* ---------- ADMIN ---------- */
+// Панель
+app.get('/admin',adm,(req,res)=>{
+ db.all('SELECT * FROM categories ORDER BY name',(e,cats)=>{
+  db.all(`SELECT products.id,products.name,products.price,(SELECT filename FROM product_images WHERE product_id=products.id LIMIT 1) AS img FROM products ORDER BY id DESC`,(e,prods)=>{
+   const catList=cats.map(c=>`<li>${c.name} <a href=/admin/cat/edit/${c.id}>✏️</a> <a href=/admin/cat/del/${c.id} onclick="return confirm('Del?')">🗑️</a></li>`).join('');
+   const prodList=prods.map(p=>`<li><img src=/uploads/${p.img||'default.png'} style="width:40px;vertical-align:middle;border-radius:4px;"> ${p.name} - ${p.price.toFixed(2)} грн <a href=/admin/prod/edit/${p.id}>✏️</a> <a href=/admin/prod/del/${p.id} onclick="return confirm('Del?')">🗑️</a></li>`).join('');
+   const body=`<h1>Адмінка</h1><h2>Категорії</h2><ul>${catList||'—'}</ul><a href=/admin/cat/new><button type=button>Додати категорію</button></a><h2>Товари</h2><ul>${prodList||'—'}</ul><a href=/admin/prod/new><button type=button>Додати товар</button></a>`;
+   page(res,body,{t:'Адмінка',u:req.session.username,a:true});
+  });
+ });
+});
+/* --- Категорії CRUD --- */
+app.route('/admin/cat/new').get(adm,(req,res)=>page(res,'<h1>Нова категорія</h1><form method=post><input name=name required><input type=submit value=Додати>',{u:req.session.username,a:true})).post(adm,(req,res)=>db.run('INSERT INTO categories(name)VALUES(?)',[req.body.name.trim()],e=>res.redirect('/admin')));
+app.route('/admin/cat/edit/:id').get(adm,(req,res)=>db.get('SELECT * FROM categories WHERE id=?',[req.params.id],(e,c)=>page(res,`<h1>Редагувати</h1><form method=post><input name=name value="${c.name}" required><input type=submit value=Зберегти>`,{u:req.session.username,a:true}))).post(adm,(req,res)=>db.run('UPDATE categories SET name=? WHERE id=?',[req.body.name.trim(),req.params.id],e=>res.redirect('/admin')));
+app.get('/admin/cat/del/:id',adm,(req,res)=>db.run('DELETE FROM categories WHERE id=?',req.params.id,e=>res.redirect('/admin')));
+/* --- Товари CRUD --- */
+const prodForm=(p={},cats=[],edit=false)=>{
+ const opts=cats.map(c=>`<option value=${c.id}${c.id==p.category_id?' selected':''}>${c.name}</option>`).join('');
+ return `<h1>${edit?'Редагувати':'Новий'} товар</h1><form method=post enctype=multipart/form-data><label>Назва</label><input name=name value="${p.name||''}" required><label>Опис</label><textarea name=description>${p.description||''}</textarea><label>Ціна</label><input name=price type=number step=0.01 value="${p.price||''}" required><label>Категорія</label><select name=category_id required>${opts}</select><label>Фото (до 5)</label><input type=file name=images multiple accept=image/*><input type=submit value="${edit?'Зберегти':'Додати'}"></form>`;
+};
+app.get('/admin/prod/new',adm,(req,res)=>db.all('SELECT * FROM categories ORDER BY name',(e,cats)=>page(res,prodForm({},cats),{u:req.session.username,a:true})));
+app.post('/admin/prod/new',adm,upload.array('images',5),(req,res)=>{
+ const {name,description,price,category_id}=req.body;if(!name||!price)return page(res,'',{e:'Поля обов’язкові',u:req.session.username,a:true});
+ db.run('INSERT INTO products(name,description,price,category_id)VALUES(?,?,?,?)',[name,description||'',price,category_id],function(err){
+  if(err)return page(res,'',{e:'Помилка',u:req.session.username,a:true});
+  const pid=this.lastID;req.files.forEach(f=>db.run('INSERT INTO product_images(product_id,filename)VALUES(?,?)',[pid,f.filename]));
+  res.redirect('/admin');
+ });
+});
+app.get('/admin/prod/edit/:id',adm,(req,res)=>{
+ db.get('SELECT * FROM products WHERE id=?',[req.params.id],(e,p)=>{
+  db.all('SELECT * FROM categories ORDER BY name',(e,cats)=>{
+   db.all('SELECT * FROM product_images WHERE product_id=?',[p.id],(e,imgs)=>{
+    const imgsHtml=imgs.map(i=>`<div style="display:inline-block;margin:4px"><img src=/uploads/${i.filename} style="width:60px;border-radius:6px"><a href=/admin/img/del/${i.id}?pid=${p.id}>🗑️</a></div>`).join('');
+    page(res,prodForm(p,cats,true)+imgsHtml,{u:req.session.username,a:true});
+   });
+  });
+ });
+});
+app.post('/admin/prod/edit/:id',adm,upload.array('images',5),(req,res)=>{
+ const{id}=req.params,{name,description,price,category_id}=req.body;
+ db.run('UPDATE products SET name=?,description=?,price=?,category_id=? WHERE id=?',[name,description,price,category_id,id],e=>{
+  req.files.forEach(f=>db.run('INSERT INTO product_images(product_id,filename)VALUES(?,?)',[id,f.filename]));
+  res.redirect('/admin');
+ });
+});
+app.get('/admin/prod/del/:id',adm,(req,res)=>{
+ db.all('SELECT filename FROM product_images WHERE product_id=?',req.params.id,(e,imgs)=>{
+  imgs.forEach(i=>fs.unlink(path.join(DIR,i.filename),()=>{}));
+  db.run('DELETE FROM product_images WHERE product_id=?',req.params.id);db.run('DELETE FROM reviews WHERE product_id=?',req.params.id);db.run('DELETE FROM products WHERE id=?',req.params.id,(e2)=>res.redirect('/admin'));
+ });
+});
+app.get('/admin/img/del/:id',adm,(req,res)=>{
+ const pid=req.query.pid;db.get('SELECT filename,product_id FROM product_images WHERE id=?',req.params.id,(e,i)=>{if(i){fs.unlink(path.join(DIR,i.filename),()=>{});db.run('DELETE FROM product_images WHERE id=?',req.params.id,()=>res.redirect(`/admin/prod/edit/${pid}`));}else res.redirect('/admin');});
+});
+/* ---------- AUTH routes (unchanged) ---------- */
 const authForm=(title,action,fields)=>`<h1>${title}</h1><form method=post action=${action}>${fields}<input type=submit value="${title}"></form>`;
 app.route('/register').get((_,res)=>page(res,authForm('Реєстрація','/register','<label>Логін</label><input name=username required pattern="[A-Za-z0-9_]{3,20}"><label>Пароль</label><input name=password type=password required minlength=5>'))).post((req,res)=>{const{username:u,password:p}=req.body;if(!u||!p)return page(res,'',{e:'Заповніть усі поля'});db.get('SELECT 1 FROM users WHERE username=?',[u],(e,r)=>r?page(res,'',{e:'Логін зайнятий'}):bcrypt.hash(p,10,(e,h)=>db.run('INSERT INTO users(username,password)VALUES(?,?)',[u,h],e=>res.redirect('/login'))));});
-app.route('/login').get((_,res)=>page(res,authForm('Вхід','/login','<label>Логін</label><input name=username required><label>Пароль</label><input name=password type=password required>'))).post((req,res)=>{const{username:u,password:p}=req.body;db.get('SELECT * FROM users WHERE username=?',[u],(e,r)=>!r?page(res,'',{e:'Невірний логін або пароль'}):bcrypt.compare(p,r.password,(e,v)=>!v?page(res,'',{e:'Невірний логін або пароль'}):(req.session.userId=r.id,req.session.username=r.username,req.session.isAdmin=r.is_admin==1,res.redirect('/'))));});
-// Logout
-app.get('/logout',(req,res)=>req.session.destroy(()=>res.redirect('/')));
-/* ---------- START ---------- */
-app.listen(PORT,()=>console.log('Running:'+PORT));
+app.route('/login').get((_,res)=>page(res,authForm('Вхід','/login','<label>Л
