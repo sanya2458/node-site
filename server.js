@@ -46,7 +46,26 @@ app.get('/admin',adm,(req,res)=>{
 });
 /* --- Категорії CRUD --- */
 app.route('/admin/cat/new').get(adm,(req,res)=>page(res,'<h1>Нова категорія</h1><form method=post><input name=name required><input type=submit value=Додати>',{u:req.session.username,a:true})).post(adm,(req,res)=>db.run('INSERT INTO categories(name)VALUES(?)',[req.body.name.trim()],e=>res.redirect('/admin')));
-app.route('/admin/cat/edit/:id').get(adm,(req,res)=>db.get('SELECT * FROM categories WHERE id=?',[req.params.id],(e,c)=>page(res,`<h1>Редагувати</h1><form method=post><input name=name value="${c.name}" required><input type=submit value=Зберегти>`,{u:req.session.username,a:true}))).post(adm,(req,res)=>db.run('UPDATE categories SET name=? WHERE id=?',[req.body.name.trim(),req.params.id],e=>res.redirect('/admin')));
+app.route('/login')
+  .get((_, res) => page(res, authForm(
+    'Вхід',
+    '/login',
+    `<label>Логін</label><input name="username" required><label>Пароль</label><input name="password" type="password" required>`
+  )))
+  .post((req, res) => {
+    const { username: u, password: p } = req.body;
+    db.get('SELECT * FROM users WHERE username=?', [u], (e, r) => {
+      if (!r) return page(res, '', { e: 'Невірний логін або пароль' });
+      bcrypt.compare(p, r.password, (e, v) => {
+        if (!v) return page(res, '', { e: 'Невірний логін або пароль' });
+        req.session.userId = r.id;
+        req.session.username = r.username;
+        req.session.isAdmin = r.is_admin == 1;
+        res.redirect('/');
+      });
+    });
+  });
+
 app.get('/admin/cat/del/:id',adm,(req,res)=>db.run('DELETE FROM categories WHERE id=?',req.params.id,e=>res.redirect('/admin')));
 /* --- Товари CRUD --- */
 const prodForm=(p={},cats=[],edit=false)=>{
