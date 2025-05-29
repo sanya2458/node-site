@@ -129,6 +129,35 @@ app.get('/cat/:id',(req,res)=>{
     res.send(page('Товари',`<main><div class="grid">${cards||'Нема'}</div></main>`,user(req)));
   });
 });
+// Форма входу
+app.get('/login', (req, res) => {
+  res.send(page('Вхід', `
+    <main>
+      <h2>Вхід</h2>
+      <form method="POST" action="/login">
+        <input name="email" type="email" placeholder="Email" required><br>
+        <input name="pass" type="password" placeholder="Пароль" required><br>
+        <button>Увійти</button>
+      </form>
+    </main>
+  `, user(req)));
+});
+
+// Форма реєстрації
+app.get('/reg', (req, res) => {
+  res.send(page('Реєстрація', `
+    <main>
+      <h2>Реєстрація</h2>
+      <form method="POST" action="/reg">
+        <input name="first" placeholder="Ім’я" required><br>
+        <input name="last" placeholder="Прізвище" required><br>
+        <input name="email" type="email" placeholder="Email" required><br>
+        <input name="pass" type="password" placeholder="Пароль" required><br>
+        <button>Зареєструватися</button>
+      </form>
+    </main>
+  `, user(req)));
+});
 
 /* ---- (інші маршрути: prod, cart, login, reg, admin, review тощо не змінені і лишаються) ---- */
 /* ... залиш свій попередній код для /prod/:id, /cart, /login, /reg, /admin, тощо ... */
