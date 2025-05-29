@@ -77,7 +77,7 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
     display: flex;
     justify-content: center;
     gap: 1rem;
-    flex-wrap: nowrap; /* змінено для рядка кнопок */
+    flex-wrap: nowrap; /* щоб всі кнопки були в один рядок */
   }
   header a {
     color: #91b2ff;
@@ -87,7 +87,7 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
     padding: 0.3rem 0.6rem;
     border-radius: 6px;
     transition: background-color 0.3s;
-    white-space: nowrap;
+    white-space: nowrap; /* не переносити текст кнопок */
   }
   header a:hover {
     background-color: #566dff44;
@@ -122,79 +122,11 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
     border-radius: 4px;
     margin-bottom: 0.5rem;
   }
-  .price-rating {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    padding: 0 0.2rem;
-    font-weight: 600;
-  }
-  button {
-    cursor: pointer;
-    background: #91b2ff;
-    color: #27303f;
-    font-weight: 700;
-    border: none;
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    margin-top: 0.5rem;
-    transition: background-color 0.3s;
-  }
-  button:hover {
-    background: #6b8dff;
-  }
-  input, select, textarea, button {
-    border-radius: 6px;
-    padding: 0.5rem;
-    border: none;
-    font-size: 1rem;
-    width: 100%;
-    max-width: 300px;
-    margin: 0.3rem auto;
-    display: block;
-    box-sizing: border-box;
-  }
-  textarea {
-    resize: vertical;
-    min-height: 60px;
-  }
-  form {
-    margin-top: 1rem;
-  }
-  .slider {
-    position: relative;
-    width: 300px;
-    height: 300px;
-    overflow: hidden;
-    margin: 0 auto 1rem;
-  }
-  .slider img {
-    position: absolute;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    transition: left 0.4s;
-  }
-  .sbtn {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: #3a4460;
-    color: #e0e3e9;
-    border: none;
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
-  }
-  #prev {
-    left: 4px;
-  }
-  #next {
-    right: 4px;
-  }
+
+  /* нові стилі для мобільної версії головної сторінки */
   @media (max-width: 600px) {
     .grid {
-      grid-template-columns: 1fr; /* комірка по ширині сайту */
+      grid-template-columns: 1fr !important; /* комірка по ширині сайту */
       gap: 0.6rem;
     }
     main {
@@ -202,32 +134,38 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
     }
     .card {
       text-align: left;
+      padding: 0.8rem 0.6rem;
     }
     .card h3 {
-      margin-bottom: 0.3rem;
+      order: -1; /* назва над фото */
+      margin-bottom: 0.4rem;
+      font-size: 1.2rem;
+      width: 100%;
     }
     .card img {
-      order: 2;
       margin-bottom: 0.3rem;
-    }
-    .card h3 {
-      order: 1;
-    }
-    .price-rating {
-      order: 3;
+      aspect-ratio: 1 / 1;
       width: 100%;
+      border-radius: 6px;
+    }
+    /* контейнер для ціни та рейтингу під фото */
+    .card .info-row {
       display: flex;
       justify-content: space-between;
-      padding: 0 0.2rem;
-      font-weight: 600;
+      width: 100%;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #91b2ff;
+    }
+    button {
+      padding: 0.4rem 0.8rem;
+      max-width: 100%;
+      font-size: 0.9rem;
     }
     input, select, textarea, button {
       max-width: 100%;
       font-size: 0.9rem;
       padding: 0.4rem;
-    }
-    button {
-      padding: 0.4rem 0.8rem;
     }
     .slider {
       width: 100%;
@@ -238,8 +176,7 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
 </style></head><body>
 <header>
   <a href="/">Головна</a><a href="/cats">Категорії</a>
-  ${u?`<a href="/cart">Кошик</a>${u.role==='admin'?'<a href="/admin">Адмін</a>':''}<a href="/logout">Вихід</a>` 
-      :'<a href="/login">Вхід</a> / <a href="/reg">Реєстрація</a>'}
+  ${u?`<a href="/cart">Кошик</a>${u.role==='admin'?'<a href="/admin">Адмін</a>':''}<a href="/logout">Вихід</a>` :'<a href="/login">Вхід</a> / <a href="/reg">Реєстрація</a>'}
 </header>${body}</body></html>`;
 
 /* ---------- маршрути ---------- */
@@ -251,15 +188,32 @@ app.get('/',(req,res)=>{
     <div class=card onclick="location='/prod/${r.id}'">
       <h3>${r.name}</h3>
       ${r.img?`<img src="/public/uploads/${r.img}">`:''}
-      <div class="price-rating">
-        <span>₴${r.price.toFixed(2)}</span>
-        <span>⭐${r.rate}</span>
-      </div>
+      <div class="info-row"><span>₴${r.price}</span><span>★ ${r.rate}</span></div>
     </div>`).join('');
-    res.send(page('Фредлос — Магазин',`<main><div class="grid">${cards}</div></main>`,user(req)));
+    res.send(page('Fredlos',`<main><h2>Товари</h2><div class=grid>${cards||'Нема'}</div></main>`,user(req)));
   });
 });
 
-/* ...інші маршрути залишаються без змін... */
+app.get('/cats',(req,res)=>{
+  db.all(`SELECT * FROM categories`,[],(e,cats)=>{
+    const list=cats.map(c=>`<li><a href="/cat/${c.id}">${c.name}</a></li>`).join('');
+    res.send(page('Категорії',`<main><h2>Категорії</h2><ul>${list||'Нема'}</ul></main>`,user(req)));
+  });
+});
 
-app.listen(PORT,()=>console.log(`Server started on http://localhost:${PORT}`));
+app.get('/cat/:id',(req,res)=>{
+  db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img,
+          IFNULL((SELECT ROUND(AVG(rating),1) FROM reviews WHERE prod=p.id),0) rate
+          FROM products p WHERE cat=?`,[req.params.id],(e,rows)=>{
+    const cards=rows.map(r=>`
+      <div class=card onclick="location='/prod/${r.id}'">
+        <h3>${r.name}</h3>
+        ${r.img?`<img src="/public/uploads/${r.img}">`:''}
+        <div class="info-row"><span>₴${r.price}</span><span>★ ${r.rate}</span></div>
+      </div>`).join('');
+    res.send(page('Товари',`<main><h2>Категорія</h2><div class=grid>${cards||'Нема'}</div></main>`,user(req)));
+  });
+});
+
+/* ---------- запуск ---------- */
+app.listen(PORT,()=>console.log(`Fredlos працює на http://localhost:${PORT}`));
