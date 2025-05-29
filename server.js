@@ -277,7 +277,7 @@ ${body}
   gtag('js', new Date());
 
   gtag('config', 'G-EL3QCTCHHX');
-</script>
+  
   // Слайдер фото товару
   let currentSlide = 0;
   function showSlide(i){
