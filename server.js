@@ -2,297 +2,359 @@ const express = require('express');
 const session = require('express-session');
 const multer  = require('multer');
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt  = require('bcryptjs');
-const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* ---------- база ---------- */
+// Папка для завантаження зображень
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+// Multer для збереження зображень
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_, __, cb) => cb(null, uploadDir),
+    filename: (_, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, Date.now() + ext);
+    }
+  })
+});
+
+// БД SQLite
 const db = new sqlite3.Database('shop.db');
-db.serialize(()=>{
+db.serialize(() => {
   db.run(`PRAGMA foreign_keys=ON`);
-  db.run(`CREATE TABLE IF NOT EXISTS users(
-    id INTEGER PRIMARY KEY, email TEXT UNIQUE, pass TEXT,
-    first TEXT, last TEXT, role TEXT)`);
-  db.run(`CREATE TABLE IF NOT EXISTS categories(
-    id INTEGER PRIMARY KEY, name TEXT UNIQUE)`);
-  db.run(`CREATE TABLE IF NOT EXISTS products(
-    id INTEGER PRIMARY KEY, name TEXT, price REAL, descr TEXT,
-    cat INTEGER, rating REAL DEFAULT 0, 
-    FOREIGN KEY(cat) REFERENCES categories(id))`);
-  db.run(`CREATE TABLE IF NOT EXISTS images(
-    id INTEGER PRIMARY KEY, prod INTEGER, file TEXT,
-    FOREIGN KEY(prod) REFERENCES products(id))`);
-  db.run(`CREATE TABLE IF NOT EXISTS reviews(
-    id INTEGER PRIMARY KEY, prod INTEGER, user INTEGER,
-    rating INTEGER, comment TEXT,
-    FOREIGN KEY(prod) REFERENCES products(id),
-    FOREIGN KEY(user) REFERENCES users(id))`);
-  db.run(`CREATE TABLE IF NOT EXISTS cart(
-    uid INTEGER, pid INTEGER, qty INTEGER, PRIMARY KEY(uid,pid))`);
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE,
+    pass TEXT,
+    role TEXT DEFAULT 'user'
+  )`);
 
-  db.get(`SELECT id FROM users WHERE role='admin'`,(e,row)=>{
-    if(!row){
-      const hash=bcrypt.hashSync('admin',10);
-      db.run(`INSERT INTO users(email,pass,first,last,role)
-              VALUES('admin@example.com',?, 'Admin','Admin','admin')`,hash);
+  db.run(`CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    price REAL,
+    description TEXT,
+    category_id INTEGER,
+    image TEXT,
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS cart (
+    user_id INTEGER,
+    product_id INTEGER,
+    quantity INTEGER DEFAULT 1,
+    PRIMARY KEY(user_id, product_id),
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(product_id) REFERENCES products(id)
+  )`);
+
+  // Створюємо адміна, якщо нема
+  db.get(`SELECT * FROM users WHERE role = 'admin'`, (e, row) => {
+    if (!row) {
+      const hash = bcrypt.hashSync('admin', 10);
+      db.run(`INSERT INTO users(email, pass, role) VALUES (?, ?, 'admin')`, ['admin@example.com', hash]);
+      console.log('Створено адміна: admin@example.com / admin');
     }
   });
 });
 
-/* ---------- файли ---------- */
-const uploadDir = path.join(__dirname,'public','uploads');
-fs.mkdirSync(uploadDir,{recursive:true});
-const upload = multer({storage:multer.diskStorage({
-  destination:(_,__,cb)=>cb(null,uploadDir),
-  filename:(_,f,cb)=>cb(null,Date.now()+path.extname(f.originalname))
-})});
+// Middleware
+app.use(express.urlencoded({ extended: true }));
+app.use('/public', express.static(path.join(__dirname, 'public')));
+app.use(session({
+  secret: 'secretkey',
+  resave: false,
+  saveUninitialized: false
+}));
 
-/* ---------- middleware ---------- */
-app.use('/public',express.static('public'));
-app.use(express.urlencoded({extended:true}));
-app.use(session({secret:'fredlos',resave:false,saveUninitialized:false}));
+// Допоміжні функції
+const getUser = (req) => req.session.user || null;
+const requireLogin = (req, res, next) => {
+  if (!getUser(req)) return res.redirect('/login');
+  next();
+};
+const requireAdmin = (req, res, next) => {
+  if (!getUser(req) || getUser(req).role !== 'admin') return res.status(403).send('Доступ заборонено');
+  next();
+};
 
-const user=(req)=>req.session.user;
-const mustLogin=(r,s,n)=> user(r)?n():s.redirect('/login');
-const mustAdmin=(r,s,n)=> user(r)&&user(r).role==='admin'?n():s.sendStatus(403);
-
-/* ---------- шаблон ---------- */
-const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
-<meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>${title}</title>
-<style>
-  body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #27303f;
-    color: #e0e3e9;
-    text-align: center;
-  }
-  header {
-    background: #3a4460;
-    padding: 1rem;
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-    flex-wrap: nowrap; /* змінили для одного рядка */
-  }
-  header a {
-    color: #91b2ff;
-    text-decoration: none;
-    font-weight: 600;
-    display: inline-block;
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
-    transition: background-color 0.3s;
-    white-space: nowrap; /* щоб текст не переносився */
-  }
-  header a:hover {
-    background-color: #566dff44;
-  }
-  h1,h2,h3 {
-    margin: 0.5rem 0;
-  }
-  main {
-    padding: 1rem;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
-    gap: 1rem;
-  }
-  .card {
-    background: #39455a;
-    border-radius: 6px;
-    padding: 0.5rem;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-  }
-  .card img {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-  .card h3 {
-    margin-bottom: 0.5rem;
-  }
-  .card .info {
-    display: flex;
-    justify-content: space-between;
-    padding: 0 0.3rem;
-  }
-  button {
-    cursor: pointer;
-    background: #91b2ff;
-    color: #27303f;
-    font-weight: 700;
-    border: none;
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    margin-top: 0.5rem;
-    transition: background-color 0.3s;
-  }
-  button:hover {
-    background: #6b8dff;
-  }
-  input, select, textarea, button {
-    border-radius: 6px;
-    padding: 0.5rem;
-    border: none;
-    font-size: 1rem;
-    width: 100%;
-    max-width: 300px;
-    margin: 0.3rem auto;
-    display: block;
-    box-sizing: border-box;
-  }
-  textarea {
-    resize: vertical;
-    min-height: 60px;
-  }
-  form {
-    margin-top: 1rem;
-  }
-  .slider {
-    position: relative;
-    width: 300px;
-    height: 300px;
-    overflow: hidden;
-    margin: 0 auto 1rem;
-  }
-  .slider img {
-    position: absolute;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    transition: left 0.4s;
-  }
-  .sbtn {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: #3a4460;
-    color: #e0e3e9;
-    border: none;
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
-  }
-  #prev {
-    left: 4px;
-  }
-  #next {
-    right: 4px;
-  }
-  @media (max-width: 600px) {
-    .grid {
-      grid-template-columns: 1fr; /* одна комірка на всю ширину */
-      gap: 0.6rem;
-    }
-    main {
-      padding: 0.5rem;
-    }
-    .card {
-      text-align: left;
-    }
-    .card h3 {
-      order: -1; /* назва над фото */
-      margin-bottom: 0.3rem;
-    }
-    .card img {
-      aspect-ratio: auto;
-      margin-bottom: 0.3rem;
-      width: 100%;
-    }
-    .card .info {
-      justify-content: space-between;
-      font-weight: 700;
-      font-size: 0.9rem;
-      margin-top: 0.2rem;
-    }
-    .card .info p {
-      margin: 0;
-      color: #c8d1ff;
-    }
-    input, select, textarea, button {
-      max-width: 100%;
-      font-size: 0.9rem;
-      padding: 0.4rem;
-    }
-    button {
-      padding: 0.4rem 0.8rem;
-    }
-    .slider {
-      width: 100%;
-      max-width: 300px;
-      height: 300px;
-    }
-    header {
-      flex-wrap: nowrap; /* зберігаємо без переносу */
-    }
-  }
-</style></head><body>
-<header>
-  <a href="/">Головна</a><a href="/cats">Категорії</a>
-  ${u?`<a href="/cart">Кошик</a>${u.role==='admin'?'<a href="/admin">Адмін</a>':''}<a href="/logout">Вихід</a>`
-      :'<a href="/login">Вхід</a><a href="/reg">Реєстрація</a>'}
-</header>${body}</body></html>`;
-
-/* ---------- маршрути ---------- */
-app.get('/',(req,res)=>{
-  db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img,
-          IFNULL((SELECT ROUND(AVG(rating),1) FROM reviews WHERE prod=p.id),0) rate
-          FROM products p`,[],(e,rows)=>{
-    const cards=rows.map(r=>`
-    <div class=card onclick="location='/prod/${r.id}'">
-      <h3>${r.name}</h3>
-      ${r.img?`<img src="/public/uploads/${r.img}" alt="${r.name}">`:'<div style="height:150px;background:#566dff44;border-radius:4px;"></div>'}
-      <div class=info>
-        <p>${r.price.toFixed(2)} ₴</p>
-        <p>⭐ ${r.rate}</p>
-      </div>
-    </div>`).join('');
-    res.send(page('Головна',`<main><h1>Товари</h1><div class=grid>${cards}</div></main>`, user(req)));
-  });
-});
-
-/* --- інші маршрути не змінював, просто приклад --- */
-app.get('/login',(req,res)=>{
-  if(user(req)) return res.redirect('/');
-  res.send(page('Вхід',`
+// Шаблон сторінки
+function layout(title, content, user = null) {
+  return `
+  <!DOCTYPE html>
+  <html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #27303f; color: #e0e3e9; margin:0; padding:0; }
+      header { background: #3a4460; padding: 1rem; display: flex; gap: 1rem; }
+      header a { color: #91b2ff; text-decoration: none; font-weight: bold; }
+      header a:hover { text-decoration: underline; }
+      main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+      form { max-width: 400px; margin: 0 auto; }
+      input, select, textarea, button { display: block; width: 100%; margin: 0.5rem 0; padding: 0.5rem; border-radius: 6px; border: none; }
+      button { background: #91b2ff; color: #27303f; font-weight: 700; cursor: pointer; }
+      button:hover { background: #6b8dff; }
+      .product { border: 1px solid #566dff44; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; background: #39455a; }
+      .product img { max-width: 100%; height: auto; border-radius: 6px; }
+      .cart-item { margin-bottom: 1rem; border-bottom: 1px solid #566dff44; padding-bottom: 1rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="/">Головна</a>
+      <a href="/categories">Категорії</a>
+      ${user ? `<a href="/cart">Кошик</a>` : ''}
+      ${user ? (user.role === 'admin' ? `<a href="/admin">Адмін</a>` : '') : ''}
+      ${user ? `<a href="/logout">Вийти (${user.email})</a>` : `<a href="/login">Увійти</a> <a href="/register">Реєстрація</a>`}
+    </header>
     <main>
-      <h1>Вхід</h1>
-      <form method="post" action="/login">
-        <input name="email" placeholder="Електронна пошта" required>
-        <input type="password" name="pass" placeholder="Пароль" required>
-        <button>Увійти</button>
-      </form>
-    </main>`));
+      ${content}
+    </main>
+  </body>
+  </html>
+  `;
+}
+
+// --- Головна сторінка --- (перелік товарів)
+app.get('/', (req, res) => {
+  db.all(`SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id`, [], (err, rows) => {
+    if (err) return res.send('Помилка БД');
+
+    let html = '';
+    rows.forEach(p => {
+      html += `
+      <div class="product">
+        <h2>${p.name}</h2>
+        ${p.image ? `<img src="/public/uploads/${p.image}" alt="${p.name}">` : ''}
+        <p>Категорія: ${p.category_name || 'Без категорії'}</p>
+        <p>Ціна: ${p.price.toFixed(2)} ₴</p>
+        <p>${p.description || ''}</p>
+        <form method="post" action="/cart/add">
+          <input type="hidden" name="product_id" value="${p.id}" />
+          <button type="submit">Додати до кошика</button>
+        </form>
+      </div>
+      `;
+    });
+    res.send(layout('Головна', html, getUser(req)));
+  });
 });
-app.post('/login',(req,res)=>{
-  const {email,pass}=req.body;
-  db.get(`SELECT * FROM users WHERE email=?`,[email],(e,u)=>{
-    if(u && bcrypt.compareSync(pass,u.pass)){
-      req.session.user={id:u.id,email:u.email,first:u.first,last:u.last,role:u.role};
-      res.redirect('/');
+
+// --- Категорії ---
+app.get('/categories', (req, res) => {
+  db.all(`SELECT * FROM categories`, [], (err, cats) => {
+    if (err) return res.send('Помилка БД');
+    let html = '<h1>Категорії</h1><ul>';
+    cats.forEach(c => {
+      html += `<li><a href="/categories/${c.id}">${c.name}</a></li>`;
+    });
+    html += '</ul>';
+    res.send(layout('Категорії', html, getUser(req)));
+  });
+});
+
+app.get('/categories/:id', (req, res) => {
+  const catId = req.params.id;
+  db.all(`SELECT * FROM products WHERE category_id = ?`, [catId], (err, prods) => {
+    if (err) return res.send('Помилка БД');
+    let html = `<h1>Товари категорії</h1><a href="/categories">Назад</a><br>`;
+    prods.forEach(p => {
+      html += `<div class="product">
+      <h2>${p.name}</h2>
+      <p>Ціна: ${p.price.toFixed(2)} ₴</p>
+      <form method="post" action="/cart/add">
+        <input type="hidden" name="product_id" value="${p.id}" />
+        <button type="submit">Додати до кошика</button>
+      </form>
+      </div>`;
+    });
+    res.send(layout('Товари категорії', html, getUser(req)));
+  });
+});
+
+// --- Кошик ---
+app.get('/cart', requireLogin, (req, res) => {
+  const user = getUser(req);
+  db.all(`
+    SELECT p.*, c.quantity FROM products p
+    JOIN cart c ON c.product_id = p.id
+    WHERE c.user_id = ?`, [user.id], (err, items) => {
+    if (err) return res.send('Помилка БД');
+
+    if (items.length === 0) {
+      return res.send(layout('Кошик', '<h1>Кошик порожній</h1>', user));
+    }
+
+    let total = 0;
+    let html = '<h1>Ваш кошик</h1>';
+    items.forEach(i => {
+      total += i.price * i.quantity;
+      html += `
+      <div class="cart-item">
+        <h3>${i.name}</h3>
+        <p>Ціна: ${i.price.toFixed(2)} ₴ x ${i.quantity}</p>
+        <form method="post" action="/cart/remove" style="display:inline;">
+          <input type="hidden" name="product_id" value="${i.id}" />
+          <button type="submit">Видалити</button>
+        </form>
+      </div>`;
+    });
+    html += `<h3>Загалом: ${total.toFixed(2)} ₴</h3>`;
+    res.send(layout('Кошик', html, user));
+  });
+});
+
+app.post('/cart/add', requireLogin, (req, res) => {
+  const user = getUser(req);
+  const productId = req.body.product_id;
+  if (!productId) return res.redirect('/');
+
+  db.get(`SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?`, [user.id, productId], (err, row) => {
+    if (row) {
+      // Якщо товар вже в кошику — збільшуємо кількість
+      db.run(`UPDATE cart SET quantity = quantity + 1 WHERE user_id = ? AND product_id = ?`, [user.id, productId], () => {
+        res.redirect('/cart');
+      });
     } else {
-      res.send(page('Вхід',`<main><h1>Невірний логін або пароль</h1>
-      <a href="/login">Спробувати ще раз</a></main>`));
+      // Якщо нема — додаємо з кількістю 1
+      db.run(`INSERT INTO cart(user_id, product_id, quantity) VALUES (?, ?, 1)`, [user.id, productId], () => {
+        res.redirect('/cart');
+      });
     }
   });
 });
-app.get('/logout',(req,res)=>{
-  req.session.destroy(()=>res.redirect('/'));
+
+app.post('/cart/remove', requireLogin, (req, res) => {
+  const user = getUser(req);
+  const productId = req.body.product_id;
+  if (!productId) return res.redirect('/cart');
+
+  db.run(`DELETE FROM cart WHERE user_id = ? AND product_id = ?`, [user.id, productId], () => {
+    res.redirect('/cart');
+  });
 });
 
-/* --- запуск --- */
-app.listen(PORT,()=>console.log(`Server running on port ${PORT}`));
+// --- Реєстрація ---
+app.get('/register', (req, res) => {
+  if (getUser(req)) return res.redirect('/');
+  res.send(layout('Реєстрація', `
+    <h1>Реєстрація</h1>
+    <form method="post" action="/register">
+      <input name="email" type="email" placeholder="Електронна пошта" required />
+      <input name="password" type="password" placeholder="Пароль" required />
+      <button>Зареєструватися</button>
+    </form>
+  `));
+});
+
+app.post('/register', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.redirect('/register');
+
+  const hash = bcrypt.hashSync(password, 10);
+  db.run(`INSERT INTO users(email, pass) VALUES (?, ?)`, [email, hash], function(err) {
+    if (err) {
+      return res.send(layout('Реєстрація', `<h1>Помилка: можливо, цей email вже зареєстрований.</h1><a href="/register">Спробуйте ще раз</a>`));
+    }
+    res.redirect('/login');
+  });
+});
+
+// --- Вхід ---
+app.get('/login', (req, res) => {
+  if (getUser(req)) return res.redirect('/');
+  res.send(layout('Вхід', `
+    <h1>Вхід</h1>
+    <form method="post" action="/login">
+      <input name="email" type="email" placeholder="Електронна пошта" required />
+      <input name="password" type="password" placeholder="Пароль" required />
+      <button>Увійти</button>
+    </form>
+  `));
+});
+
+app.post('/login', (req, res) => {
+  const { email, password } = req.body;
+  db.get(`SELECT * FROM users WHERE email = ?`, [email], (err, user) => {
+    if (!user || !bcrypt.compareSync(password, user.pass)) {
+      return res.send(layout('Вхід', `<h1>Невірний логін або пароль</h1><a href="/login">Спробувати ще раз</a>`));
+    }
+    req.session.user = { id: user.id, email: user.email, role: user.role };
+    res.redirect('/');
+  });
+});
+
+// --- Вихід ---
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
+});
+
+// --- Адмінка --- (додавання категорій та товарів)
+app.get('/admin', requireAdmin, (req, res) => {
+  db.all(`SELECT * FROM categories`, [], (err, cats) => {
+    if (err) return res.send('Помилка БД');
+    let html = `
+      <h1>Адмін панель</h1>
+      <h2>Додати категорію</h2>
+      <form method="post" action="/admin/category/add">
+        <input name="name" placeholder="Назва категорії" required />
+        <button>Додати</button>
+      </form>
+      <h2>Додати товар</h2>
+      <form method="post" action="/admin/product/add" enctype="multipart/form-data">
+        <input name="name" placeholder="Назва товару" required />
+        <input name="price" type="number" step="0.01" placeholder="Ціна" required />
+        <textarea name="description" placeholder="Опис"></textarea>
+        <select name="category_id" required>
+          <option value="">-- Оберіть категорію --</option>
+          ${cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+        </select>
+        <input type="file" name="image" accept="image/*" />
+        <button>Додати товар</button>
+      </form>
+    `;
+    res.send(layout('Адмінка', html, getUser(req)));
+  });
+});
+
+app.post('/admin/category/add', requireAdmin, (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.redirect('/admin');
+
+  db.run(`INSERT INTO categories(name) VALUES (?)`, [name], (err) => {
+    if (err) return res.send('Помилка додавання категорії');
+    res.redirect('/admin');
+  });
+});
+
+app.post('/admin/product/add', requireAdmin, upload.single('image'), (req, res) => {
+  const { name, price, description, category_id } = req.body;
+  const image = req.file ? req.file.filename : null;
+  if (!name || !price || !category_id) return res.redirect('/admin');
+
+  db.run(`INSERT INTO products(name, price, description, category_id, image) VALUES (?, ?, ?, ?, ?)`,
+    [name, parseFloat(price), description, category_id, image], (err) => {
+      if (err) return res.send('Помилка додавання товару');
+      res.redirect('/admin');
+    });
+});
+
+app.listen(PORT, () => {
+  console.log(`Сервер запущено: http://localhost:${PORT}`);
+});
