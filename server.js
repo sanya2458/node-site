@@ -65,19 +65,152 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
 <meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <style>
-body{margin:0;font-family:Arial;background:#131a21;color:#dde1e7}
-header{background:#0f1621;padding:1rem;display:flex;gap:1rem;flex-wrap:wrap}
-header a{color:#6ea8ff;text-decoration:none;font-weight:600}
-h1,h2,h3{margin:.5rem 0}main{padding:1rem;max-width:900px;margin:0 auto}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem}
-.card{background:#1e2630;border-radius:6px;padding:.5rem;cursor:pointer}
-.card img{width:100%;border-radius:4px}button{cursor:pointer}
-input,select,textarea,button{border-radius:6px;padding:.4rem;border:none}
-button{background:#6ea8ff;color:#0f1621;font-weight:700}
-.slider{position:relative;width:300px;height:300px;overflow:hidden;margin:0 auto 1rem}
-.slider img{position:absolute;top:0;width:100%;height:100%;object-fit:contain;transition:left .4s}
-.sbtn{position:absolute;top:50%;transform:translateY(-50%);background:#0f1621;color:#dde1e7;border:none}
-#prev{left:4px}#next{right:4px}
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #27303f;
+    color: #e0e3e9;
+    text-align: center;
+  }
+  header {
+    background: #3a4460;
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  header a {
+    color: #91b2ff;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-block;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    transition: background-color 0.3s;
+  }
+  header a:hover {
+    background-color: #566dff44;
+  }
+  h1,h2,h3 {
+    margin: 0.5rem 0;
+  }
+  main {
+    padding: 1rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
+    gap: 1rem;
+  }
+  .card {
+    background: #39455a;
+    border-radius: 6px;
+    padding: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .card img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  button {
+    cursor: pointer;
+    background: #91b2ff;
+    color: #27303f;
+    font-weight: 700;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin-top: 0.5rem;
+    transition: background-color 0.3s;
+  }
+  button:hover {
+    background: #6b8dff;
+  }
+  input, select, textarea, button {
+    border-radius: 6px;
+    padding: 0.5rem;
+    border: none;
+    font-size: 1rem;
+    width: 100%;
+    max-width: 300px;
+    margin: 0.3rem auto;
+    display: block;
+    box-sizing: border-box;
+  }
+  textarea {
+    resize: vertical;
+    min-height: 60px;
+  }
+  form {
+    margin-top: 1rem;
+  }
+  .slider {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    overflow: hidden;
+    margin: 0 auto 1rem;
+  }
+  .slider img {
+    position: absolute;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transition: left 0.4s;
+  }
+  .sbtn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #3a4460;
+    color: #e0e3e9;
+    border: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+  }
+  #prev {
+    left: 4px;
+  }
+  #next {
+    right: 4px;
+  }
+  @media (max-width: 600px) {
+    .grid {
+      grid-template-columns: repeat(auto-fill,minmax(140px,1fr));
+      gap: 0.6rem;
+    }
+    main {
+      padding: 0.5rem;
+    }
+    .card img {
+      aspect-ratio: 1 / 1;
+      margin-bottom: 0.3rem;
+    }
+    input, select, textarea, button {
+      max-width: 100%;
+      font-size: 0.9rem;
+      padding: 0.4rem;
+    }
+    button {
+      padding: 0.4rem 0.8rem;
+    }
+    .slider {
+      width: 100%;
+      max-width: 300px;
+      height: 300px;
+    }
+  }
 </style></head><body>
 <header>
   <a href="/">Головна</a><a href="/cats">Категорії</a>
@@ -139,124 +272,198 @@ app.get('/prod/:id',(req,res)=>{
 <h3>Відгуки</h3>${revHTML}
 ${user(req)?`<form method=POST action="/rev/${p.id}">
 <select name=rating required><option value="">★</option>${[1,2,3,4,5].map(n=>`<option>${n}</option>`)}</select>
-<textarea name=comment required></textarea><button>Додати</button></form>`:'<p>Щоб залишити відгук — увійдіть</p>'}
+<textarea name=comment placeholder="Коментар" required></textarea>
+<button>Додати відгук</button>
+</form>`:''}
 </main>
 <script>
-(()=>{const imgs=[...document.querySelectorAll('.slider img')];let i=0;
-const show=n=>imgs.forEach((im,idx)=>im.style.left=(idx===n?'0':'100%'));
-prev.onclick=_=>{i=(i-1+imgs.length)%imgs.length;show(i)};
-next.onclick=_=>{i=(i+1)%imgs.length;show(i)};
-})();
-</script>`,user(req)));
+const slides=document.querySelectorAll('.slider img');
+let cur=0;
+document.getElementById('next').onclick=()=> {
+  slides[cur].style.left='-100%';
+  cur=(cur+1)%slides.length;
+  slides[cur].style.left='0';
+};
+document.getElementById('prev').onclick=()=> {
+  slides[cur].style.left='100%';
+  cur=(cur-1+slides.length)%slides.length;
+  slides[cur].style.left='0';
+};
+</script>
+`,user(req)));
       });
     });
   });
 });
 
-/* ---------- відгук ---------- */
-app.post('/rev/:id',(req,res)=>mustLogin(req,res,()=>{
-  db.run(`INSERT INTO reviews(prod,user,rating,comment) VALUES(?,?,?,?)`,
-    [req.params.id,user(req).id,req.body.rating,req.body.comment],()=>res.redirect('/prod/'+req.params.id));
-}));
-
-/* ---------- кошик ---------- */
-app.post('/cart/add',(req,res)=>mustLogin(req,res,()=>{
-  db.run(`INSERT INTO cart(uid,pid,qty) VALUES(?,?,1)
-         ON CONFLICT(uid,pid) DO UPDATE SET qty=qty+1`,
-         [user(req).id,req.body.pid],()=>res.redirect('/cart'));
-}));
-app.get('/cart',(req,res)=>mustLogin(req,res,()=>{
-  db.all(`SELECT c.*,p.name,p.price,(SELECT file FROM images WHERE prod=p.id LIMIT 1) img
-          FROM cart c JOIN products p ON p.id=c.pid WHERE uid=?`,[user(req).id],(e,rows)=>{
-    const total=rows.reduce((s,r)=>s+r.price*r.qty,0);
-    const list=rows.map(r=>`<div class=card style="display:flex;gap:.5rem">
-      ${r.img?`<img src="/public/uploads/${r.img}" style="width:80px">`:''}
-      <div><h3>${r.name}</h3><p>${r.qty} x ₴${r.price}</p></div></div>`).join('');
-    res.send(page('Кошик',`<main><h2>Кошик</h2>${list||'Порожній'}<h3>Всього: ₴${total.toFixed(2)}</h3></main>`,user(req)));
+app.post('/rev/:id',mustLogin,(req,res)=>{
+  const uid=user(req).id;
+  const pid =req.params.id;
+  const rating=parseInt(req.body.rating);
+  const comment=req.body.comment;
+  if(!rating || !comment) return res.redirect(`/prod/${pid}`);
+  db.run(`INSERT INTO reviews(prod,user,rating,comment) VALUES(?,?,?,?)`,[pid,uid,rating,comment],(e)=>{
+    res.redirect(`/prod/${pid}`);
   });
-}));
+});
+
+app.get('/cart',mustLogin,(req,res)=>{
+  const uid = user(req).id;
+  db.all(`SELECT c.qty, p.id, p.name, p.price, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img
+          FROM cart c JOIN products p ON p.id=c.pid WHERE c.uid=?`,[uid],(e,rows)=>{
+    if(e) return res.sendStatus(500);
+    let sum=0;
+    const items=rows.map(r=>{
+      sum+=r.qty*r.price;
+      return `<li>${r.qty}× <a href="/prod/${r.id}">${r.name}</a> — ₴${r.price*r.qty}
+      <form style="display:inline" method=POST action="/cart/rem">
+      <input type=hidden name=pid value="${r.id}">
+      <button>Видалити</button></form></li>`;
+    }).join('');
+    res.send(page('Кошик',`<main><h2>Кошик</h2>
+    <ul>${items||'Порожній'}</ul>
+    <p><b>Всього: ₴${sum}</b></p>
+    <form method=POST action="/cart/clear"><button>Очистити кошик</button></form>
+    </main>`,user(req)));
+  });
+});
+
+app.post('/cart/add',mustLogin,(req,res)=>{
+  const uid=user(req).id;
+  const pid=parseInt(req.body.pid);
+  const qty=parseInt(req.body.qty)||1;
+  if(!pid || qty<1) return res.redirect('/');
+  db.get(`SELECT qty FROM cart WHERE uid=? AND pid=?`,[uid,pid],(e,row)=>{
+    if(row){
+      db.run(`UPDATE cart SET qty=qty+? WHERE uid=? AND pid=?`,[qty,uid,pid],()=>res.redirect('/cart'));
+    } else {
+      db.run(`INSERT INTO cart(uid,pid,qty) VALUES(?,?,?)`,[uid,pid,qty],()=>res.redirect('/cart'));
+    }
+  });
+});
+
+app.post('/cart/rem',mustLogin,(req,res)=>{
+  const uid=user(req).id;
+  const pid=parseInt(req.body.pid);
+  if(!pid) return res.redirect('/cart');
+  db.run(`DELETE FROM cart WHERE uid=? AND pid=?`,[uid,pid],()=>res.redirect('/cart'));
+});
+
+app.post('/cart/clear',mustLogin,(req,res)=>{
+  const uid=user(req).id;
+  db.run(`DELETE FROM cart WHERE uid=?`,[uid],()=>res.redirect('/cart'));
+});
 
 /* ---------- авторизація ---------- */
-app.get('/login',(req,res)=>res.send(page('Вхід',`
-<main><form method=POST>
-<input name=email placeholder="Email" required>
-<input type=password name=pass placeholder="Пароль" required>
-<button>Увійти</button></form></main>`)));
+app.get('/login',(req,res)=>{
+  if(user(req)) return res.redirect('/');
+  res.send(page('Вхід',`<main><h2>Вхід</h2>
+  <form method=POST action="/login">
+  <input name=email type=email placeholder="Email" required autofocus>
+  <input name=pass type=password placeholder="Пароль" required>
+  <button>Увійти</button></form></main>`));
+});
 
 app.post('/login',(req,res)=>{
-  db.get(`SELECT * FROM users WHERE email=?`,[req.body.email],(e,u)=>{
-    if(u&&bcrypt.compareSync(req.body.pass,u.pass)){req.session.user=u;return res.redirect('/');}
-    res.send(page('Помилка','<main><p>Невірні дані</p><a href=/login>Назад</a></main>'));
+  const {email, pass} = req.body;
+  db.get(`SELECT * FROM users WHERE email=?`,[email],(e,u)=>{
+    if(!u || !bcrypt.compareSync(pass,u.pass)) {
+      return res.send(page('Вхід','<main><p>Неправильний email або пароль</p><a href="/login">Спробувати знову</a></main>'));
+    }
+    req.session.user = {id: u.id, email: u.email, first: u.first, last: u.last, role: u.role};
+    res.redirect('/');
   });
 });
 
-app.get('/reg',(r,s)=>s.send(page('Реєстрація',`
-<main><form method=POST>
-<input name=first placeholder="Ім’я" required>
-<input name=last placeholder="Прізвище" required>
-<input name=email type=email placeholder="Email" required>
-<input name=pass type=password placeholder="Пароль" required>
-<button>Зареєструватись</button></form></main>`)));
+app.get('/logout',(req,res)=>{
+  req.session.destroy(()=>res.redirect('/'));
+});
+
+/* ---------- реєстрація ---------- */
+app.get('/reg',(req,res)=>{
+  if(user(req)) return res.redirect('/');
+  res.send(page('Реєстрація',`<main><h2>Реєстрація</h2>
+  <form method=POST action="/reg">
+  <input name=email type=email placeholder="Email" required autofocus>
+  <input name=first placeholder="Ім'я" required>
+  <input name=last placeholder="Прізвище" required>
+  <input name=pass type=password placeholder="Пароль" required>
+  <input name=pass2 type=password placeholder="Підтвердження пароля" required>
+  <button>Зареєструватися</button></form></main>`));
+});
 
 app.post('/reg',(req,res)=>{
-  const {first,last,email,pass}=req.body;
-  db.get(`SELECT id FROM users WHERE email=?`,[email],(e,row)=>{
-    if(row)return res.send(page('Є','<main>Email зайнятий</main>'));
-    db.run(`INSERT INTO users(email,pass,first,last,role) VALUES(?,?,?,?,?)`,
-      [email,bcrypt.hashSync(pass,10),first,last,'user'],function(){
-        db.get(`SELECT * FROM users WHERE id=?`,[this.lastID],(e,u)=>{req.session.user=u;res.redirect('/')});
-      });
-  });
+  const {email, first, last, pass, pass2} = req.body;
+  if(pass !== pass2) return res.send(page('Реєстрація','<main><p>Паролі не співпадають</p><a href="/reg">Назад</a></main>'));
+  const hash = bcrypt.hashSync(pass,10);
+  db.run(`INSERT INTO users(email,first,last,pass,role) VALUES(?,?,?,?,?)`,
+    [email,first,last,hash,'user'],function(e){
+      if(e){
+        return res.send(page('Реєстрація',`<main><p>Помилка: ${e.message}</p><a href="/reg">Назад</a></main>`));
+      }
+      res.redirect('/login');
+    });
 });
 
-app.get('/logout',(r,s)=>{r.session.destroy(()=>s.redirect('/'))});
-
-/* ---------- адмінка ---------- */
+/* ---------- адмін ---------- */
 app.get('/admin',mustAdmin,(req,res)=>{
-  db.all(`SELECT * FROM categories`,[],(e,cats)=>{
-    db.all(`SELECT p.*,c.name cat FROM products p LEFT JOIN categories c ON c.id=p.cat`,[],(e,prods)=>{
-      const catList=cats.map(c=>`<li>${c.name}
-        <form style="display:inline" method=POST action="/admin/delcat">
-        <input type=hidden name=id value=${c.id}><button>✖</button></form></li>`).join('');
-      const prodList=prods.map(p=>`<li>${p.name} (₴${p.price}) [${p.cat||'—'}]
-        <form style="display:inline" method=POST action="/admin/delprod">
-        <input type=hidden name=id value=${p.id}><button>✖</button></form></li>`).join('');
-      const catOpt=cats.map(c=>`<option value=${c.id}>${c.name}</option>`).join('');
-      res.send(page('Адмін',`
-<main>
-<h2>Категорії</h2><ul>${catList||'Нема'}</ul>
-<form method=POST action="/admin/addcat"><input name=name required><button>Додати</button></form>
-<hr><h2>Товари</h2><ul>${prodList||'Нема'}</ul>
-<form method=POST enctype="multipart/form-data" action="/admin/addprod">
-<input name=name placeholder="Назва" required>
-<input name=price type=number step=0.01 placeholder="Ціна" required>
-<select name=cat><option value="">—</option>${catOpt}</select>
-<textarea name=descr placeholder="Опис"></textarea>
-<input type=file name=img multiple required accept="image/*">
-<button>Додати товар</button></form>
-</main>`,user(req)));
+  // список категорій і продуктів
+  db.all(`SELECT * FROM categories ORDER BY id`,[],(e,cats)=>{
+    db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img FROM products p ORDER BY p.id`,[],(e,prods)=>{
+      let catOptions = cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+      let catList = cats.map(c=>`<li>${c.id}: ${c.name}</li>`).join('');
+      let prodList = prods.map(p=>`
+      <li><b>${p.id}</b> ${p.name} - ₴${p.price} (Категорія ${p.cat})
+      ${p.img?`<br><img src="/public/uploads/${p.img}" style="max-width:150px">`:''}
+      </li>`).join('');
+      res.send(page('Адмін панель',`
+      <main>
+      <h2>Адмін панель</h2>
+      <section>
+        <h3>Категорії</h3>
+        <ul>${catList||'Порожньо'}</ul>
+        <form method=POST action="/admin/cat">
+          <input name=name placeholder="Нова категорія" required>
+          <button>Додати категорію</button>
+        </form>
+      </section>
+      <section>
+        <h3>Товари</h3>
+        <ul>${prodList||'Порожньо'}</ul>
+        <form method=POST action="/admin/prod" enctype="multipart/form-data">
+          <input name=name placeholder="Назва товару" required>
+          <input name=price type=number step=0.01 min=0 placeholder="Ціна" required>
+          <textarea name=descr placeholder="Опис"></textarea>
+          <select name=cat required>${catOptions}</select>
+          <input type=file name=img accept="image/*">
+          <button>Додати товар</button>
+        </form>
+      </section>
+      </main>`,'admin'));
     });
   });
 });
 
-app.post('/admin/addcat',mustAdmin,(req,res)=>{
-  db.run(`INSERT INTO categories(name) VALUES(?)`,[req.body.name.trim()],()=>res.redirect('/admin'));
-});
-app.post('/admin/delcat',mustAdmin,(req,res)=>{
-  db.run(`DELETE FROM categories WHERE id=?`,[req.body.id],()=>res.redirect('/admin'));
-});
-app.post('/admin/addprod',mustAdmin,upload.array('img',5),(req,res)=>{
-  const {name,price,descr,cat}=req.body;
-  db.run(`INSERT INTO products(name,price,descr,cat) VALUES(?,?,?,?)`,
-    [name,price,descr,cat||null],function(){
-      req.files.forEach(f=>db.run(`INSERT INTO images(prod,file) VALUES(?,?)`,
-        [this.lastID,f.filename]));
-      res.redirect('/admin');
-    });
-});
-app.post('/admin/delprod',mustAdmin,(req,res)=>{
-  db.run(`DELETE FROM products WHERE id=?`,[req.body.id],()=>res.redirect('/admin'));
+app.post('/admin/cat',mustAdmin,(req,res)=>{
+  const name = req.body.name.trim();
+  if(!name) return res.redirect('/admin');
+  db.run(`INSERT INTO categories(name) VALUES(?)`,[name],(e)=>{
+    res.redirect('/admin');
+  });
 });
 
-/* ---------- старт ---------- */
-app.listen(PORT,()=>console.log('Fredlos запущено на',PORT));
+app.post('/admin/prod',mustAdmin,upload.single('img'),(req,res)=>{
+  const {name, price, descr, cat} = req.body;
+  if(!name || !price || !cat) return res.redirect('/admin');
+  db.run(`INSERT INTO products(name,price,descr,cat) VALUES(?,?,?,?)`,
+    [name, parseFloat(price), descr, parseInt(cat)], function(e){
+      if(e) return res.redirect('/admin');
+      if(req.file){
+        db.run(`INSERT INTO images(prod,file) VALUES(?,?)`,[this.lastID,req.file.filename]);
+      }
+      res.redirect('/admin');
+  });
+});
+
+/* ---------- запуск ---------- */
+app.listen(PORT,()=>console.log(`Fredlos магазин працює на http://localhost:${PORT}`));
