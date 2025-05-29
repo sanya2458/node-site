@@ -174,6 +174,53 @@ app.post('/admin/prod/edit/:id',mustAdmin,upload.array('imgs',5),async (req,res)
   res.redirect('/admin');
 });
 app.post('/admin/prod/del',mustAdmin,async (req,res)=>{await run(`DELETE FROM products WHERE id=?`,[req.body.id]);res.redirect('/admin');});
+<form method="POST" enctype="multipart/form-data" action="/admin/prod/add">
+  <input name="name" placeholder="Назва" required>
+  <input name="price" type="number" step="0.01" placeholder="Ціна" required>
+  <textarea name="descr" placeholder="Опис"></textarea>
+  <select name="cat" required>${catOpts}</select>
+  <input name="imgs" type="file" multiple required>
+  <button>Додати</button>
+</form></main>`, user(req)));
+});
+
+app.post('/admin/cat/add', mustAdmin, async (req, res) => {
+  await run(`INSERT INTO categories(name) VALUES(?)`, [req.body.name]);
+  res.redirect('/admin');
+});
+
+app.post('/admin/cat/del', mustAdmin, async (req, res) => {
+  await run(`DELETE FROM categories WHERE id=?`, [req.body.id]);
+  res.redirect('/admin');
+});
+
+app.post('/admin/cat/edit', mustAdmin, async (req, res) => {
+  await run(`UPDATE categories SET name=? WHERE id=?`, [req.body.name, req.body.id]);
+  res.redirect('/admin');
+});
+
+app.post('/admin/prod/add', mustAdmin, upload.array('imgs'), async (req, res) => {
+  const { name, price, descr, cat } = req.body;
+  const r = await new Promise(r => {
+    db.run(`INSERT INTO products(name, price, descr, cat) VALUES(?,?,?,?)`, [name, price, descr, cat], function() {
+      r(this.lastID);
+    });
+  });
+  for (const f of req.files) {
+    await run(`INSERT INTO images(prod, file) VALUES(?,?)`, [r, f.filename]);
+  }
+  res.redirect('/admin');
+});
+
+app.post('/admin/prod/edit/:id', mustAdmin, async (req, res) => {
+  await run(`UPDATE products SET name=?, price=? WHERE id=?`, [req.body.name, req.body.price, req.params.id]);
+  res.redirect('/admin');
+});
+
+app.post('/admin/prod/del', mustAdmin, async (req, res) => {
+  await run(`DELETE FROM products WHERE id=?`, [req.body.id]);
+  res.redirect('/admin');
+});
 
 /* ---------- запуск ---------- */
-app.listen(PORT,()=>console.log('Fredlos працює на '+PORT));
+app.listen(PORT, () => console.log(`Сервер Fredlos працює на порту ${PORT}`));
