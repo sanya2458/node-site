@@ -270,7 +270,14 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
       :'<a href="/login">Вхід</a><a href="/reg">Реєстрація</a>'}
 </header>
 ${body}
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EL3QCTCHHX"></script>
 <script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-EL3QCTCHHX');
+</script>
   // Слайдер фото товару
   let currentSlide = 0;
   function showSlide(i){
