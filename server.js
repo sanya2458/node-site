@@ -266,412 +266,394 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
 </head><body>
 <header>
   <a href="/">Головна</a><a href="/cats">Категорії</a>
-  ${u?`<a href="/cart">Кошик</a>${u.role==='admin'?'<a href="/admin">Адмін</a>':''}<a href="/logout">Вихід</a>`
-      :'<a href="/login">Вхід</a><a href="/reg">Реєстрація</a>'}
-</header>
-${body}
-<script>
-  // Слайдер фото товару
-  let currentSlide = 0;
-  function showSlide(i){
-    const slides = document.querySelectorAll('.slider img');
-    if (!slides.length) return;
-    if(i<0) i=slides.length-1;
-    if(i>=slides.length) i=0;
-    currentSlide=i;
-    slides.forEach((s,index)=>{
-      s.style.left = (index - currentSlide) * 100 + '%';
-    });
-  }
-  function nextSlide(){
-    showSlide(currentSlide + 1);
-  }
-  function prevSlide(){
-    showSlide(currentSlide - 1);
-  }
-  document.addEventListener('DOMContentLoaded',()=>{
-    if(document.querySelectorAll('.slider img').length){
-      showSlide(0);
-      document.getElementById('next')?.addEventListener('click',nextSlide);
-      document.getElementById('prev')?.addEventListener('click',prevSlide);
-    }
-  });
-</script>
+  ${u?`<a href="/cart">Кошик</a>${u.role==='admin'?'<a href="/admin">Адмін</a>':''}<a href="/logout">Вихід</a><span style="color:#91b2ff;padding-left:1rem;">${u.first}</span>`:
+    '<a href="/login">Вхід</a><a href="/register">Реєстрація</a>'}
+</header><main>${body}</main>
 </body></html>`;
 
-/* ---------- маршрути ---------- */
-
-app.get('/',(req,res)=>{
-  db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img,
-          IFNULL((SELECT ROUND(AVG(rating),1) FROM reviews WHERE prod=p.id),0) rate
-          FROM products p`,[],(e,rows)=>{
-    if(e) return res.sendStatus(500);
-    const cards=rows.map(r=>`
-    <div class=card onclick="location='/prod/${r.id}'">
-      <h3>${r.name}</h3>
-      ${r.img?`<img src="/public/uploads/${r.img}" alt="${r.name}">`
-           :'<div style="height:150px;background:#566dff44;border-radius:4px;"></div>'}
-      <div class=info>
-        <p>${r.price.toFixed(2)} ₴</p>
-        <p>⭐ ${r.rate}</p>
-      </div>
-    </div>`).join('');
-    res.send(page('Головна',`<main><h1>Товари</h1><div class=grid>${cards}</div></main>`, user(req)));
+/* ---------- головна сторінка ---------- */
+app.get('/', (req, res) => {
+  db.all(`SELECT p.id, p.name, p.price, p.rating,
+          i.file FROM products p
+          LEFT JOIN images i ON i.prod = p.id
+          GROUP BY p.id LIMIT 20`, (e, products) => {
+    if (e) return res.send('Помилка БД');
+    const html = products.map(p => `
+      <div class="card" onclick="location.href='/product/${p.id}'">
+        ${p.file ? `<img src="/public/uploads/${p.file}" alt="Фото">` : ''}
+        <h3>${p.name}</h3>
+        <div class="info">
+          <p>${p.price.toFixed(2)} ₴</p>
+          <p>⭐${p.rating ? p.rating.toFixed(1) : '0'}</p>
+        </div>
+      </div>`).join('');
+    res.send(page('Головна - Фредлос', `<h1>Товари</h1><div class="grid">${html}</div>`, user(req)));
   });
 });
 
-app.get('/cats', (req,res)=>{
-  db.all(`SELECT * FROM categories ORDER BY name`,[],(e,cats)=>{
-    if(e) return res.sendStatus(500);
-    let catList = cats.map(c=>`<li><a href="/cats/${c.id}">${c.name}</a></li>`).join('');
-    res.send(page('Категорії',`<main><h1>Категорії</h1><ul>${catList}</ul></main>`, user(req)));
+/* ---------- категорії ---------- */
+app.get('/cats', (req, res) => {
+  db.all(`SELECT * FROM categories ORDER BY name`, (e, cats) => {
+    if (e) return res.send('Помилка БД');
+    const html = cats.map(c => `<li><a href="/cat/${c.id}">${c.name}</a></li>`).join('');
+    res.send(page('Категорії - Фредлос', `<h1>Категорії</h1><ul>${html}</ul>`, user(req)));
   });
 });
 
-app.get('/cats/:id', (req,res)=>{
-  const catId = req.params.id;
-  db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img,
-          IFNULL((SELECT ROUND(AVG(rating),1) FROM reviews WHERE prod=p.id),0) rate
-          FROM products p WHERE p.cat=?`,[catId],(e,rows)=>{
-    if(e) return res.sendStatus(500);
-    const cards=rows.map(r=>`
-    <div class=card onclick="location='/prod/${r.id}'">
-      <h3>${r.name}</h3>
-      ${r.img?`<img src="/public/uploads/${r.img}" alt="${r.name}">`
-           :'<div style="height:150px;background:#566dff44;border-radius:4px;"></div>'}
-      <div class=info>
-        <p>${r.price.toFixed(2)} ₴</p>
-        <p>⭐ ${r.rate}</p>
-      </div>
-    </div>`).join('');
-    res.send(page('Товари категорії',`<main><h1>Категорія</h1><div class=grid>${cards}</div></main>`, user(req)));
-  });
-});
-
-app.get('/prod/:id', (req,res)=>{
-  const prodId = req.params.id;
-  db.get(`SELECT p.*, IFNULL((SELECT ROUND(AVG(rating),1) FROM reviews WHERE prod=p.id),0) rate FROM products p WHERE p.id=?`, [prodId], (e,prod)=>{
-    if(e || !prod) return res.sendStatus(404);
-    db.all(`SELECT file FROM images WHERE prod=? ORDER BY id LIMIT 7`, [prodId], (e2, imgs)=>{
-      if(e2) return res.sendStatus(500);
-      db.all(`SELECT r.*, u.first, u.last FROM reviews r LEFT JOIN users u ON r.user=u.id WHERE r.prod=? ORDER BY r.id DESC`, [prodId], (e3, reviews)=>{
-        if(e3) return res.sendStatus(500);
-
-        const stars = (n) => '★'.repeat(n) + '☆'.repeat(5-n);
-
-        const imgsHtml = imgs.length ? imgs.map((im,i) => `<img src="/public/uploads/${im.file}" style="left:${i*100}%" alt="Фото ${i+1}">`).join('') : `<div style="height:300px;background:#566dff44;border-radius:4px;"></div>`;
-
-        const reviewsHtml = reviews.length ? reviews.map(r=>`
-          <div class="review">
-            <p><b>${r.first} ${r.last}</b> - <span class="stars">${stars(r.rating)}</span></p>
-            <p>${r.comment||''}</p>
+/* ---------- товари по категорії ---------- */
+app.get('/cat/:id', (req, res) => {
+  const id = +req.params.id;
+  db.all(`SELECT p.id, p.name, p.price, p.rating,
+          i.file FROM products p
+          LEFT JOIN images i ON i.prod = p.id
+          WHERE p.cat=? GROUP BY p.id`, [id], (e, products) => {
+    if (e) return res.send('Помилка БД');
+    db.get(`SELECT name FROM categories WHERE id=?`, [id], (e2, cat) => {
+      if (e2 || !cat) return res.send('Категорія не знайдена');
+      const html = products.map(p => `
+        <div class="card" onclick="location.href='/product/${p.id}'">
+          ${p.file ? `<img src="/public/uploads/${p.file}" alt="Фото">` : ''}
+          <h3>${p.name}</h3>
+          <div class="info">
+            <p>${p.price.toFixed(2)} ₴</p>
+            <p>⭐${p.rating ? p.rating.toFixed(1) : '0'}</p>
           </div>
-        `).join('') : '<p>Відгуків немає</p>';
+        </div>`).join('');
+      res.send(page(`${cat.name} - Фредлос`, `<h1>Категорія: ${cat.name}</h1><div class="grid">${html}</div>`, user(req)));
+    });
+  });
+});
 
-        let reviewForm = '';
-        if(user(req)){
-          reviewForm = `<form method="POST" action="/prod/${prodId}/review">
-            <h3>Додати відгук</h3>
-            <label>Рейтинг (1-5): <input type="number" name="rating" min="1" max="5" required></label>
-            <label>Коментар: <textarea name="comment"></textarea></label>
-            <button type="submit">Відправити</button>
-          </form>`;
-        } else {
-          reviewForm = `<p><a href="/login">Увійдіть</a>, щоб залишити відгук.</p>`;
-        }
+/* ---------- показ одного товару з описом і відгуками ---------- */
+app.get('/product/:id', (req, res) => {
+  const id = +req.params.id;
+  db.get(`SELECT p.*, c.name catname FROM products p
+          LEFT JOIN categories c ON c.id = p.cat
+          WHERE p.id=?`, [id], (e, prod) => {
+    if (e || !prod) return res.send('Товар не знайдено');
+    db.all(`SELECT file FROM images WHERE prod=?`, [id], (e2, imgs) => {
+      if (e2) imgs = [];
+      db.all(`SELECT r.rating, r.comment, u.first, u.last FROM reviews r
+              LEFT JOIN users u ON u.id = r.user
+              WHERE r.prod=? ORDER BY r.id DESC`, [id], (e3, revs) => {
+        if (e3) revs = [];
+        const imgsHtml = imgs.length ?
+          `<div class="slider" id="slider">${imgs.map((im,i) =>
+            `<img src="/public/uploads/${im.file}" style="left:${i*100}%">`).join('')}
+            <button id="prev" class="sbtn">&#10094;</button>
+            <button id="next" class="sbtn">&#10095;</button>
+          </div>` : '';
+        const revHtml = revs.length ? revs.map(r =>
+          `<div class="review"><div class="stars">${'★'.repeat(r.rating)}</div>
+           <p>${r.comment}</p><p><b>${r.first} ${r.last}</b></p></div>`).join('') :
+          '<p>Відгуків поки немає.</p>';
+        const cartBtn = user(req) ? `<form method="post" action="/cart/add">
+          <input type="hidden" name="pid" value="${id}">
+          <button type="submit">Додати в кошик</button>
+        </form>` : '<p><a href="/login">Увійдіть</a>, щоб додати в кошик.</p>';
 
-        res.send(page(prod.name,`
-          <main>
-            <h1>${prod.name}</h1>
-            <div class="slider">
-              ${imgsHtml}
-              ${imgs.length>1 ? `<button class="sbtn" id="prev">&#10094;</button><button class="sbtn" id="next">&#10095;</button>` : ''}
-            </div>
-            <p><b>Ціна:</b> ${prod.price.toFixed(2)} ₴</p>
-            <p><b>Рейтинг:</b> ${prod.rate} ⭐</p>
-            <p><b>Опис:</b> ${prod.descr || 'Немає опису'}</p>
-            <section class="reviews">
-              <h2>Відгуки</h2>
-              ${reviewsHtml}
-            </section>
-            ${reviewForm}
-          </main>
+        res.send(page(prod.name + ' - Фредлос', `
+          <h1>${prod.name}</h1>
+          ${imgsHtml}
+          <p><b>Ціна:</b> ${prod.price.toFixed(2)} ₴</p>
+          <p><b>Категорія:</b> <a href="/cat/${prod.cat}">${prod.catname}</a></p>
+          <p>${prod.descr}</p>
+          ${cartBtn}
+          <h2>Відгуки</h2>
+          <div class="reviews">${revHtml}</div>
         `, user(req)));
-
       });
     });
   });
 });
 
-app.post('/prod/:id/review', mustLogin, (req,res)=>{
+/* ---------- кошик ---------- */
+app.get('/cart', mustLogin, (req, res) => {
   const uid = user(req).id;
-  const prodId = req.params.id;
-  let rating = +req.body.rating;
-  let comment = req.body.comment || '';
-  if(rating<1) rating=1;
-  if(rating>5) rating=5;
-
-  db.run(`INSERT INTO reviews(prod,user,rating,comment) VALUES(?,?,?,?)`,
-    [prodId, uid, rating, comment], (e)=>{
-      if(e) return res.sendStatus(500);
-      // оновлюємо середній рейтинг продукту (необов'язково)
-      db.get(`SELECT ROUND(AVG(rating),1) avgR FROM reviews WHERE prod=?`, [prodId], (e,r)=>{
-        if(!e && r){
-          db.run(`UPDATE products SET rating=? WHERE id=?`, [r.avgR, prodId]);
-        }
-        res.redirect('/prod/'+prodId);
-      });
-    });
-});
-
-/* ---------- аутентифікація ---------- */
-
-app.get('/login',(req,res)=>{
-  res.send(page('Вхід',`
-    <main>
-      <h1>Вхід</h1>
-      <form method="POST" action="/login">
-        <input type="email" name="email" placeholder="Email" required autofocus>
-        <input type="password" name="pass" placeholder="Пароль" required>
-        <button>Увійти</button>
-      </form>
-    </main>
-  `));
-});
-
-app.post('/login',(req,res)=>{
-  const email = req.body.email;
-  const pass = req.body.pass;
-  db.get(`SELECT * FROM users WHERE email=?`, [email], (e,u)=>{
-    if(e || !u) return res.redirect('/login');
-    if(!bcrypt.compareSync(pass, u.pass)) return res.redirect('/login');
-    req.session.user = {id: u.id, email:u.email, first:u.first, last:u.last, role:u.role};
-    res.redirect('/');
+  db.all(`SELECT c.pid, c.qty, p.name, p.price, i.file FROM cart c
+          LEFT JOIN products p ON p.id = c.pid
+          LEFT JOIN images i ON i.prod = p.id
+          WHERE c.uid=? GROUP BY c.pid`, [uid], (e, items) => {
+    if (e) return res.send('Помилка БД');
+    if (items.length === 0) return res.send(page('Кошик порожній - Фредлос', '<h1>Кошик порожній</h1>', user(req)));
+    const total = items.reduce((a,i)=>a+i.price*i.qty,0);
+    const html = items.map(i => `
+      <div class="card">
+        ${i.file ? `<img src="/public/uploads/${i.file}" alt="Фото">` : ''}
+        <h3>${i.name}</h3>
+        <p>Ціна: ${i.price.toFixed(2)} ₴</p>
+        <p>Кількість: ${i.qty}</p>
+        <form method="post" action="/cart/remove" style="display:inline;">
+          <input type="hidden" name="pid" value="${i.pid}">
+          <button type="submit">Видалити</button>
+        </form>
+      </div>`).join('');
+    res.send(page('Кошик - Фредлос', `<h1>Ваш кошик</h1><div class="grid">${html}</div><h3>Загалом: ${total.toFixed(2)} ₴</h3>`, user(req)));
   });
 });
 
-app.get('/reg',(req,res)=>{
-  res.send(page('Реєстрація',`
-    <main>
-      <h1>Реєстрація</h1>
-      <form method="POST" action="/reg">
-        <input type="text" name="first" placeholder="Ім'я" required>
-        <input type="text" name="last" placeholder="Прізвище" required>
-        <input type="email" name="email" placeholder="Email" required>
-        <input type="password" name="pass" placeholder="Пароль" required>
-        <button>Зареєструватися</button>
-      </form>
-    </main>
+app.post('/cart/add', mustLogin, (req, res) => {
+  const uid = user(req).id;
+  const pid = +req.body.pid;
+  db.get(`SELECT qty FROM cart WHERE uid=? AND pid=?`, [uid, pid], (e, row) => {
+    if (e) return res.send('Помилка');
+    if (row) {
+      db.run(`UPDATE cart SET qty=qty+1 WHERE uid=? AND pid=?`, [uid, pid], () => res.redirect('/cart'));
+    } else {
+      db.run(`INSERT INTO cart(uid, pid, qty) VALUES(?,?,1)`, [uid, pid], () => res.redirect('/cart'));
+    }
+  });
+});
+
+app.post('/cart/remove', mustLogin, (req, res) => {
+  const uid = user(req).id;
+  const pid = +req.body.pid;
+  db.run(`DELETE FROM cart WHERE uid=? AND pid=?`, [uid, pid], () => res.redirect('/cart'));
+});
+
+/* ---------- реєстрація ---------- */
+app.get('/register', (req, res) => {
+  if (user(req)) return res.redirect('/');
+  res.send(page('Реєстрація - Фредлос', `
+    <h1>Реєстрація</h1>
+    <form method="post" action="/register">
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="first" placeholder="Ім'я" required>
+      <input name="last" placeholder="Прізвище" required>
+      <input name="pass" type="password" placeholder="Пароль" required minlength="4">
+      <button type="submit">Зареєструватись</button>
+    </form>
   `));
 });
 
-app.post('/reg',(req,res)=>{
-  const {first,last,email,pass} = req.body;
-  if(!first || !last || !email || !pass) return res.redirect('/reg');
-  const hash = bcrypt.hashSync(pass,10);
-  db.run(`INSERT INTO users(first,last,email,pass,role) VALUES(?,?,?,?,?)`,
-    [first,last,email,hash,'user'],(e)=>{
-      if(e) return res.redirect('/reg');
-      res.redirect('/login');
-    });
+app.post('/register', (req, res) => {
+  if (user(req)) return res.redirect('/');
+  const { email, first, last, pass } = req.body;
+  if (!email || !first || !last || !pass) return res.send('Заповніть всі поля');
+  const hash = bcrypt.hashSync(pass, 10);
+  db.run(`INSERT INTO users(email, pass, first, last, role) VALUES(?,?,?,?, 'user')`,
+    [email, hash, first, last], function(err) {
+      if (err) return res.send('Цей email вже зареєстровано');
+      req.session.user = { id: this.lastID, email, first, last, role: 'user' };
+      res.redirect('/');
+  });
 });
 
-app.get('/logout',(req,res)=>{
+/* ---------- вхід ---------- */
+app.get('/login', (req, res) => {
+  if (user(req)) return res.redirect('/');
+  res.send(page('Вхід - Фредлос', `
+    <h1>Вхід</h1>
+    <form method="post" action="/login">
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="pass" type="password" placeholder="Пароль" required minlength="4">
+      <button type="submit">Увійти</button>
+    </form>
+  `));
+});
+
+app.post('/login', (req, res) => {
+  if (user(req)) return res.redirect('/');
+  const { email, pass } = req.body;
+  db.get(`SELECT * FROM users WHERE email=?`, [email], (e, row) => {
+    if (e || !row) return res.send('Неправильний email або пароль');
+    if (bcrypt.compareSync(pass, row.pass)) {
+      req.session.user = { id: row.id, email: row.email, first: row.first, last: row.last, role: row.role };
+      res.redirect('/');
+    } else {
+      res.send('Неправильний email або пароль');
+    }
+  });
+});
+
+/* ---------- вихід ---------- */
+app.get('/logout', (req, res) => {
   req.session.destroy(()=>res.redirect('/'));
 });
 
-/* ---------- адмін ---------- */
-
-app.get('/admin', mustAdmin, (req,res)=>{
-  db.all(`SELECT * FROM categories ORDER BY name`,[],(e,cats)=>{
-    if(e) return res.sendStatus(500);
-    db.all(`SELECT p.*, c.name catname,
-            (SELECT file FROM images WHERE prod=p.id LIMIT 1) img
-            FROM products p LEFT JOIN categories c ON p.cat=c.id
-            ORDER BY p.name`,[],(e2, prods)=>{
-      if(e2) return res.sendStatus(500);
-
-      let catList = cats.map(c=>`
-        <li>
-          ${c.name}
-          <form style="display:inline" method="POST" action="/admin/cat/delete" onsubmit="return confirm('Видалити категорію?')">
-            <input type="hidden" name="id" value="${c.id}">
-            <button type="submit">Видалити</button>
+/* ---------- панель адміністратора ---------- */
+app.get('/admin', mustAdmin, (req, res) => {
+  db.all(`SELECT * FROM categories ORDER BY name`, (e, cats) => {
+    if (e) return res.send('Помилка БД');
+    db.all(`SELECT p.*, c.name catname FROM products p LEFT JOIN categories c ON p.cat=c.id ORDER BY p.name`, (e2, prods) => {
+      if (e2) return res.send('Помилка БД');
+      const catsHtml = cats.map(c => `<li>${c.name} 
+        <form method="post" action="/admin/catdel" style="display:inline;">
+          <input type="hidden" name="id" value="${c.id}">
+          <button type="submit" onclick="return confirm('Видалити категорію?')">Видалити</button>
+        </form></li>`).join('');
+      const prodsHtml = prods.map(p => `<li>${p.name} (${p.catname || 'Без категорії'}) - ${p.price.toFixed(2)} ₴
+        <a href="/admin/prodedit/${p.id}">Редагувати</a>
+        <form method="post" action="/admin/proddel" style="display:inline;">
+          <input type="hidden" name="id" value="${p.id}">
+          <button type="submit" onclick="return confirm('Видалити товар?')">Видалити</button>
+        </form></li>`).join('');
+      res.send(page('Адмін - Фредлос', `
+        <h1>Адмін панель</h1>
+        <section>
+          <h2>Категорії</h2>
+          <ul>${catsHtml}</ul>
+          <form method="post" action="/admin/catadd">
+            <input name="name" placeholder="Нова категорія" required>
+            <button type="submit">Додати категорію</button>
           </form>
-          <form style="display:inline" method="POST" action="/admin/cat/edit">
-            <input type="hidden" name="id" value="${c.id}">
-            <input type="text" name="name" value="${c.name}" required>
-            <button type="submit">Редагувати</button>
-          </form>
-        </li>
-      `).join('');
-
-      let prodList = prods.map(p=>`
-        <div style="background:#566dff44; border-radius:6px; margin-bottom:1rem; padding:0.5rem;">
-          <h3>${p.name} (${p.catname||'Без категорії'})</h3>
-          ${p.img?`<img src="/public/uploads/${p.img}" alt="${p.name}" style="max-width:150px;">` : ''}
-          <p>Ціна: ${p.price.toFixed(2)} ₴</p>
-          <p>Опис: ${p.descr?p.descr.replace(/</g,"&lt;").replace(/>/g,"&gt;") : ''}</p>
-          <form style="display:inline-block" method="POST" action="/admin/prod/delete" onsubmit="return confirm('Видалити товар?')">
-            <input type="hidden" name="id" value="${p.id}">
-            <button>Видалити</button>
-          </form>
-          <button onclick="document.getElementById('edit-prod-${p.id}').style.display='block'">Редагувати</button>
-          <div id="edit-prod-${p.id}" style="display:none; background:#39455a; padding:1rem; border-radius:6px; margin-top:0.5rem;">
-            <form method="POST" action="/admin/prod/edit" enctype="multipart/form-data">
-              <input type="hidden" name="id" value="${p.id}">
-              <input type="text" name="name" value="${p.name}" required placeholder="Назва">
-              <input type="number" step="0.01" min="0" name="price" value="${p.price}" required placeholder="Ціна">
-              <select name="cat">
-                <option value="">Без категорії</option>
-                ${cats.map(c=>`<option value="${c.id}" ${p.cat===c.id?'selected':''}>${c.name}</option>`).join('')}
-              </select>
-              <textarea name="descr" placeholder="Опис">${p.descr || ''}</textarea>
-              <label>Додати фото (до 7): <input type="file" name="photos" accept="image/*" multiple></label>
-              <button type="submit">Зберегти</button>
-            </form>
-            <form method="POST" action="/admin/prod/imgdelete">
-              <input type="hidden" name="prod" value="${p.id}">
-              <p>Фото товару:</p>
-              ${(() => {
-                // отримати фото для продукту
-                let html = '';
-                const imgs = [];
-                // Потрібно зробити запит за фото окремо, тому буде ajax або інший маршрут, але у адміністраторському інтерфейсі - це трішки складно, тому зробимо простіше:
-                return `<p>Щоб видалити фото, зайди у адмін через інший маршрут</p>`;
-              })()}
-            </form>
-          </div>
-        </div>
-      `).join('');
-
-      res.send(page('Адмін',`
-        <main>
-          <h1>Адмін панель</h1>
-          <section>
-            <h2>Категорії</h2>
-            <ul style="list-style:none; padding:0;">${catList}</ul>
-            <form method="POST" action="/admin/cat/add">
-              <input type="text" name="name" placeholder="Нова категорія" required>
-              <button>Додати категорію</button>
-            </form>
-          </section>
-          <section style="margin-top:2rem;">
-            <h2>Товари</h2>
-            <form method="POST" action="/admin/prod/add" enctype="multipart/form-data" style="margin-bottom:1rem;">
-              <input type="text" name="name" placeholder="Назва" required>
-              <input type="number" step="0.01" min="0" name="price" placeholder="Ціна" required>
-              <select name="cat">
-                <option value="">Без категорії</option>
-                ${cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
-              </select>
-              <textarea name="descr" placeholder="Опис"></textarea>
-              <label>Фото (до 7): <input type="file" name="photos" accept="image/*" multiple required></label>
-              <button>Додати товар</button>
-            </form>
-            ${prodList}
-          </section>
-        </main>
+        </section>
+        <section>
+          <h2>Товари</h2>
+          <a href="/admin/prodadd">Додати новий товар</a>
+          <ul>${prodsHtml}</ul>
+        </section>
       `, user(req)));
     });
   });
 });
 
-/* --- Категорії --- */
-
-app.post('/admin/cat/add', mustAdmin, (req,res)=>{
-  const name = req.body.name?.trim();
-  if(!name) return res.redirect('/admin');
-  db.run(`INSERT INTO categories(name) VALUES(?)`, [name], (e)=>{
+/* ---------- додавання категорії ---------- */
+app.post('/admin/catadd', mustAdmin, (req, res) => {
+  const name = req.body.name.trim();
+  if (!name) return res.redirect('/admin');
+  db.run(`INSERT INTO categories(name) VALUES(?)`, [name], err => {
     res.redirect('/admin');
   });
 });
 
-app.post('/admin/cat/edit', mustAdmin, (req,res)=>{
+/* ---------- видалення категорії ---------- */
+app.post('/admin/catdel', mustAdmin, (req, res) => {
   const id = +req.body.id;
-  const name = req.body.name?.trim();
-  if(!id || !name) return res.redirect('/admin');
-  db.run(`UPDATE categories SET name=? WHERE id=?`, [name, id], (e)=>{
+  db.run(`DELETE FROM categories WHERE id=?`, [id], err => {
     res.redirect('/admin');
   });
 });
 
-app.post('/admin/cat/delete', mustAdmin, (req,res)=>{
-  const id = +req.body.id;
-  if(!id) return res.redirect('/admin');
-  db.run(`DELETE FROM categories WHERE id=?`, [id], (e)=>{
-    res.redirect('/admin');
+/* ---------- сторінка додавання товару ---------- */
+app.get('/admin/prodadd', mustAdmin, (req, res) => {
+  db.all(`SELECT * FROM categories ORDER BY name`, (e, cats) => {
+    if (e) return res.send('Помилка БД');
+    const opts = cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    res.send(page('Додати товар - Адмін - Фредлос', `
+      <h1>Додати товар</h1>
+      <form method="post" action="/admin/prodadd" enctype="multipart/form-data">
+        <input name="name" placeholder="Назва" required>
+        <input name="price" type="number" step="0.01" min="0" placeholder="Ціна" required>
+        <textarea name="descr" placeholder="Опис"></textarea>
+        <select name="cat">${opts}</select>
+        <input type="file" name="imgs" accept="image/*" multiple>
+        <button type="submit">Додати</button>
+      </form>
+      <p><a href="/admin">Назад</a></p>
+    `, user(req)));
   });
 });
 
-/* --- Товари --- */
-
-app.post('/admin/prod/add', mustAdmin, upload.array('photos', 7), (req,res)=>{
-  const {name, price, cat, descr} = req.body;
-  if(!name || !price) return res.redirect('/admin');
-  db.run(`INSERT INTO products(name,price,cat,descr,rating) VALUES(?,?,?,?,0)`,
-    [name.trim(), +price, cat ? +cat : null, descr.trim()], function(e){
-    if(e) return res.redirect('/admin');
-    const prodId = this.lastID;
-    if(req.files && req.files.length){
-      const stmt = db.prepare(`INSERT INTO images(prod,file) VALUES(?,?)`);
-      for(const f of req.files){
-        stmt.run(prodId, f.filename);
-      }
-      stmt.finalize();
-    }
-    res.redirect('/admin');
-  });
-});
-
-app.post('/admin/prod/edit', mustAdmin, upload.array('photos', 7), (req,res)=>{
-  const {id, name, price, cat, descr} = req.body;
-  if(!id || !name || !price) return res.redirect('/admin');
-  db.run(`UPDATE products SET name=?, price=?, cat=?, descr=? WHERE id=?`,
-    [name.trim(), +price, cat ? +cat : null, descr.trim(), +id], (e)=>{
-    if(e) return res.redirect('/admin');
-    if(req.files && req.files.length){
-      // додати фото, не видаляючи старі
-      const stmt = db.prepare(`INSERT INTO images(prod,file) VALUES(?,?)`);
-      for(const f of req.files){
-        stmt.run(+id, f.filename);
-      }
-      stmt.finalize();
-    }
-    res.redirect('/admin');
-  });
-});
-
-app.post('/admin/prod/delete', mustAdmin, (req,res)=>{
-  const id = +req.body.id;
-  if(!id) return res.redirect('/admin');
-  db.run(`DELETE FROM products WHERE id=?`, [id], (e)=>{
-    if(e) return res.redirect('/admin');
-    // видалити фото товару
-    db.all(`SELECT file FROM images WHERE prod=?`, [id], (e2, rows)=>{
-      if(!e2 && rows && rows.length){
-        for(const r of rows){
-          try { fs.unlinkSync(path.join(__dirname, 'public', 'uploads', r.file)); } catch{}
+/* ---------- обробка додавання товару ---------- */
+app.post('/admin/prodadd', mustAdmin, upload.array('imgs', 6), (req, res) => {
+  const { name, price, descr, cat } = req.body;
+  db.run(`INSERT INTO products(name, price, descr, cat) VALUES(?,?,?,?)`,
+    [name, price, descr, cat], function(err) {
+      if (err) return res.send('Помилка додавання товару');
+      const prodId = this.lastID;
+      if (req.files && req.files.length > 0) {
+        const stmt = db.prepare(`INSERT INTO images(prod, file) VALUES(?,?)`);
+        for (const f of req.files) {
+          stmt.run(prodId, f.filename);
         }
-      }
-      db.run(`DELETE FROM images WHERE prod=?`, [id], (e3)=>{
+        stmt.finalize(() => res.redirect('/admin'));
+      } else {
         res.redirect('/admin');
+      }
+    });
+});
+
+/* ---------- сторінка редагування товару ---------- */
+app.get('/admin/prodedit/:id', mustAdmin, (req, res) => {
+  const id = +req.params.id;
+  db.get(`SELECT * FROM products WHERE id=?`, [id], (e, prod) => {
+    if (e || !prod) return res.send('Товар не знайдено');
+    db.all(`SELECT * FROM categories ORDER BY name`, (e2, cats) => {
+      if (e2) return res.send('Помилка БД');
+      db.all(`SELECT * FROM images WHERE prod=?`, [id], (e3, imgs) => {
+        if (e3) imgs = [];
+        const opts = cats.map(c => `<option value="${c.id}" ${c.id===prod.cat?'selected':''}>${c.name}</option>`).join('');
+        const imgsHtml = imgs.map(img => `
+          <div>
+            <img src="/public/uploads/${img.file}" alt="Фото" style="max-width:150px;max-height:150px;">
+            <form method="post" action="/admin/imgdel" style="display:inline;">
+              <input type="hidden" name="id" value="${img.id}">
+              <button type="submit" onclick="return confirm('Видалити фото?')">Видалити</button>
+            </form>
+          </div>`).join('');
+        res.send(page('Редагувати товар - Адмін - Фредлос', `
+          <h1>Редагувати товар</h1>
+          <form method="post" action="/admin/prodedit/${id}" enctype="multipart/form-data">
+            <input name="name" placeholder="Назва" value="${prod.name}" required>
+            <input name="price" type="number" step="0.01" min="0" value="${prod.price}" required>
+            <textarea name="descr" placeholder="Опис">${prod.descr||''}</textarea>
+            <select name="cat">${opts}</select>
+            <p>Існуючі фото:</p>
+            ${imgsHtml || '<p>Фото немає</p>'}
+            <p>Додати нові фото (максимум 6):</p>
+            <input type="file" name="imgs" accept="image/*" multiple>
+            <button type="submit">Зберегти</button>
+          </form>
+          <p><a href="/admin">Назад</a></p>
+        `, user(req)));
       });
     });
   });
 });
 
-app.post('/admin/prod/imgdelete', mustAdmin, (req,res)=>{
-  const prod = +req.body.prod;
-  const file = req.body.file;
-  if(!prod || !file) return res.redirect('/admin');
-  db.run(`DELETE FROM images WHERE prod=? AND file=?`, [prod,file], (e)=>{
-    if(!e){
-      try { fs.unlinkSync(path.join(__dirname, 'public', 'uploads', file)); } catch{}
-    }
-    res.redirect('/admin');
+/* ---------- обробка редагування товару ---------- */
+app.post('/admin/prodedit/:id', mustAdmin, upload.array('imgs', 6), (req, res) => {
+  const id = +req.params.id;
+  const { name, price, descr, cat } = req.body;
+  db.run(`UPDATE products SET name=?, price=?, descr=?, cat=? WHERE id=?`,
+    [name, price, descr, cat, id], err => {
+      if (err) return res.send('Помилка оновлення товару');
+      if (req.files && req.files.length > 0) {
+        const stmt = db.prepare(`INSERT INTO images(prod, file) VALUES(?,?)`);
+        for (const f of req.files) {
+          stmt.run(id, f.filename);
+        }
+        stmt.finalize(() => res.redirect('/admin'));
+      } else {
+        res.redirect('/admin');
+      }
+    });
+});
+
+/* ---------- видалення фото ---------- */
+app.post('/admin/imgdel', mustAdmin, (req, res) => {
+  const id = +req.body.id;
+  db.get(`SELECT file FROM images WHERE id=?`, [id], (e, row) => {
+    if (e || !row) return res.redirect('/admin');
+    const filePath = path.join(__dirname, 'public', 'uploads', row.file);
+    fs.unlink(filePath, () => {
+      db.run(`DELETE FROM images WHERE id=?`, [id], () => res.redirect('/admin'));
+    });
   });
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, ()=>console.log(`Server running on http://localhost:${port}`));
+/* ---------- додавання відгуку ---------- */
+app.post('/review/add', mustLogin, (req, res) => {
+  const uid = user(req).id;
+  const pid = +req.body.pid;
+  const rating = +req.body.rating;
+  const comment = req.body.comment.trim();
+  if (!pid || !rating || rating < 1 || rating > 5) return res.send('Невірні дані');
+  db.run(`INSERT INTO reviews(user, prod, rating, comment) VALUES(?,?,?,?)`,
+    [uid, pid, rating, comment], err => {
+      if (err) return res.send('Помилка додавання відгуку');
+      // Оновлення рейтингу товару
+      db.get(`SELECT AVG(rating) avg FROM reviews WHERE prod=?`, [pid], (e, row) => {
+        if (!e && row) {
+          db.run(`UPDATE products SET rating=? WHERE id=?`, [row.avg, pid]);
+        }
+      });
+      res.redirect('/product/' + pid);
+  });
+});
+
+/* ---------- запуск сервера ---------- */
+app.listen(port, () => {
+  console.log(`Сервер запущено на http://localhost:${port}`);
+});
