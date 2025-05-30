@@ -272,22 +272,6 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
 ${body}
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-EL3QCTCHHX"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.del-photo').forEach(btn => {
-      btn.addEventListener('click', async e => {
-        const imgId = e.target.dataset.id;
-        const prodId = window.location.pathname.split('/').pop();
-
-        const res = await fetch(`/delete-photo/${prodId}/${imgId}`, { method: 'DELETE' });
-        if (res.ok) {
-          e.target.parentElement.remove(); // видалити фото з DOM
-        } else {
-          alert('Помилка видалення фото');
-        }
-      });
-    });
-  });
-
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
@@ -691,25 +675,6 @@ app.post('/admin/prod/edit', mustAdmin, upload.array('photos', 7), (req,res)=>{
       stmt.finalize();
     }
     res.redirect('/admin');
-  });
-});
-
-app.post('/admin/prod/delete', mustAdmin, (req,res)=>{
-  const id = +req.body.id;
-  if(!id) return res.redirect('/admin');
-  db.run(`DELETE FROM products WHERE id=?`, [id], (e)=>{
-    if(e) return res.redirect('/admin');
-    // видалити фото товару
-    db.all(`SELECT file FROM images WHERE prod=?`, [id], (e2, rows)=>{
-      if(!e2 && rows && rows.length){
-        for(const r of rows){
-          try { fs.unlinkSync(path.join(__dirname, 'public', 'uploads', r.file)); } catch{}
-        }
-      }
-      db.run(`DELETE FROM images WHERE prod=?`, [id], (e3)=>{
-        res.redirect('/admin');
-      });
-    });
   });
 });
 
