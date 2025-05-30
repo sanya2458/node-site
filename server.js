@@ -308,12 +308,45 @@ ${body}
 </body></html>`;
 
 /* ---------- маршрути ---------- */
+/* ---------- список товарів ---------- */
 app.get('/products', (req, res) => {
-  db.all(`SELECT * FROM products`, (err, rows) => {
-    if(err) return res.status(500).send('Помилка бази даних');
-    res.render('products', {products: rows});
-  });
+  db.all(
+    `SELECT p.*,
+            (SELECT file FROM images WHERE prod = p.id LIMIT 1)  AS img,
+            IFNULL((SELECT ROUND(AVG(rating),1) FROM reviews WHERE prod = p.id), 0) AS rate
+     FROM   products p`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).send('Помилка бази даних');
+
+      /* формуємо «картки» так само, як на головній */
+      const cards = rows
+        .map(r => `
+          <div class="card" onclick="location='/prod/${r.id}'">
+            <h3>${r.name}</h3>
+            ${
+              r.img
+                ? `<img src="/public/uploads/${r.img}" alt="${r.name}">`
+                : '<div style="height:150px;background:#566dff44;border-radius:4px;"></div>'
+            }
+            <div class="info">
+              <p>${r.price.toFixed(2)} ₴</p>
+              <p>⭐ ${r.rate}</p>
+            </div>
+          </div>`)
+        .join('');
+
+      res.send(
+        page(
+          'Усі товари',
+          `<main><h1>Усі товари</h1><div class="grid">${cards}</div></main>`,
+          user(req)
+        )
+      );
+    }
+  );
 });
+
 
 app.get('/',(req,res)=>{
   db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img,
