@@ -675,33 +675,43 @@ app.delete('/delete-photo/:prodId/:imgId', async (req, res) => {
   }
 });
 
-// Видалити товар (адмін)
-app.post('/product/delete', mustAdmin, (req, res) => {
-  const id = req.body.id;
-  if (!id) return res.status(400).send('Bad request');
+// Видалити товар за id (доступно тільки адміну)
+app.post('/products/delete/:id', (req, res) => {
+  if (!user(req) || user(req).role !== 'admin') return res.sendStatus(403);
+  const id = req.params.id;
 
-  db.run(`DELETE FROM products WHERE id = ?`, [id], function(err) {
-    if (err) {
-      console.error(err);
-      return res.status(500).send('Помилка при видаленні товару');
-    }
-    res.redirect('/products'); // або куди треба
+  // Спочатку видалити пов'язані з товаром зображення, відгуки, записи в кошику
+  db.serialize(() => {
+    db.run(`DELETE FROM images WHERE prod = ?`, id);
+    db.run(`DELETE FROM reviews WHERE prod = ?`, id);
+    db.run(`DELETE FROM cart WHERE pid = ?`, id);
+
+    // Потім видалити сам товар
+    db.run(`DELETE FROM products WHERE id = ?`, id, function(err) {
+      if (err) {
+        console.error(err);
+        return res.status(500).send('Помилка видалення товару');
+      }
+      res.redirect('/products'); // перенаправлення назад на список товарів
+    });
   });
 });
 
-// Видалити категорію (адмін)
-app.post('/category/delete', mustAdmin, (req, res) => {
-  const id = req.body.id;
-  if (!id) return res.status(400).send('Bad request');
+// Видалити категорію за id (теж тільки для адміна)
+app.post('/categories/delete/:id', (req, res) => {
+  if (!user(req) || user(req).role !== 'admin') return res.sendStatus(403);
+  const id = req.params.id;
 
-  db.run(`DELETE FROM categories WHERE id = ?`, [id], function(err) {
+  // Видалити категорію
+  db.run(`DELETE FROM categories WHERE id = ?`, id, function(err) {
     if (err) {
       console.error(err);
-      return res.status(500).send('Помилка при видаленні категорії');
+      return res.status(500).send('Помилка видалення категорії');
     }
-    res.redirect('/categories'); // або куди треба
+    res.redirect('/categories'); // повернення до списку категорій
   });
 });
+
 
 
 app.post('/admin/prod/edit', mustAdmin, upload.array('photos', 7), (req,res)=>{
