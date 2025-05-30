@@ -768,5 +768,33 @@ app.post('/admin/prod/imgdelete', mustAdmin, (req,res)=>{
   });
 });
 
+app.get('/admin/del/:id', mustAdmin, (req, res) => {
+  const pid = req.params.id;
+
+  // Спочатку отримуємо всі файли зображень
+  db.all(`SELECT file FROM images WHERE prod = ?`, [pid], (err, rows) => {
+    if (rows && rows.length) {
+      // Видалення файлів з диска
+      rows.forEach(row => {
+        const filePath = path.join(uploadDir, row.file);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      });
+    }
+
+    // Потім видаляємо записи з бази
+    db.serialize(() => {
+      db.run(`DELETE FROM images WHERE prod = ?`, [pid]);
+      db.run(`DELETE FROM reviews WHERE prod = ?`, [pid]);
+      db.run(`DELETE FROM cart WHERE pid = ?`, [pid]);
+      db.run(`DELETE FROM products WHERE id = ?`, [pid], () => {
+        res.redirect('/admin');
+      });
+    });
+  });
+});
+
+
 const port = process.env.PORT || 3000;
 app.listen(port, ()=>console.log(`Server running on http://localhost:${port}`));
