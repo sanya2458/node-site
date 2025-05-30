@@ -659,6 +659,34 @@ app.delete('/delete-photo/:prodId/:imgId', async (req, res) => {
   }
 });
 
+// Видалити товар (адмін)
+app.post('/product/delete', mustAdmin, (req, res) => {
+  const id = req.body.id;
+  if (!id) return res.status(400).send('Bad request');
+
+  db.run(`DELETE FROM products WHERE id = ?`, [id], function(err) {
+    if (err) {
+      console.error(err);
+      return res.status(500).send('Помилка при видаленні товару');
+    }
+    res.redirect('/products'); // або куди треба
+  });
+});
+
+// Видалити категорію (адмін)
+app.post('/category/delete', mustAdmin, (req, res) => {
+  const id = req.body.id;
+  if (!id) return res.status(400).send('Bad request');
+
+  db.run(`DELETE FROM categories WHERE id = ?`, [id], function(err) {
+    if (err) {
+      console.error(err);
+      return res.status(500).send('Помилка при видаленні категорії');
+    }
+    res.redirect('/categories'); // або куди треба
+  });
+});
+
 
 app.post('/admin/prod/edit', mustAdmin, upload.array('photos', 7), (req,res)=>{
   const {id, name, price, cat, descr} = req.body;
