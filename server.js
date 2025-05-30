@@ -272,6 +272,22 @@ const page=(title,body,u='')=>`<!doctype html><html lang="uk"><head>
 ${body}
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-EL3QCTCHHX"></script>
 <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.del-photo').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        const imgId = e.target.dataset.id;
+        const prodId = window.location.pathname.split('/').pop();
+
+        const res = await fetch(`/delete-photo/${prodId}/${imgId}`, { method: 'DELETE' });
+        if (res.ok) {
+          e.target.parentElement.remove(); // видалити фото з DOM
+        } else {
+          alert('Помилка видалення фото');
+        }
+      });
+    });
+  });
+
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
@@ -630,6 +646,35 @@ app.post('/admin/prod/add', mustAdmin, upload.array('photos', 7), (req,res)=>{
     res.redirect('/admin');
   });
 });
+
+app.delete('/delete-photo/:prodId/:imgId', async (req, res) => {
+  const { prodId, imgId } = req.params;
+
+  try {
+    const product = await db.get('SELECT images FROM products WHERE id = ?', [prodId]);
+    if (!product) return res.status(404).send('Товар не знайдено');
+
+    const imgs = JSON.parse(product.images || '[]');
+    const imgToDelete = imgs.find(i => i.id == imgId);
+    if (!imgToDelete) return res.status(404).send('Фото не знайдено');
+
+    // Видаляємо файл з файлової системи
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, 'public/uploads', imgToDelete.file);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    // Оновлюємо список фото в БД
+    const newImgs = imgs.filter(i => i.id != imgId);
+    await db.run('UPDATE products SET images = ? WHERE id = ?', [JSON.stringify(newImgs), prodId]);
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
 
 app.post('/admin/prod/edit', mustAdmin, upload.array('photos', 7), (req,res)=>{
   const {id, name, price, cat, descr} = req.body;
