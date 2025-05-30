@@ -40,21 +40,6 @@ db.serialize(() => {
               VALUES('admin@example.com',?, 'Admin','Admin','admin')`, hash);
     }
   });
-
-  // Ось тут перевірка і додавання товарів
-  db.get(`SELECT COUNT(*) AS count FROM products`, (err, row) => {
-    if (err) {
-      console.error(err);
-      return;
-    }
-    if (row.count === 0) {
-      const stmt = db.prepare(`INSERT INTO products(name, price, descr, cat) VALUES (?, ?, ?, ?)`);
-      stmt.run('Товар 1', 100, 'Опис товару 1', null);
-      stmt.run('Товар 2', 200, 'Опис товару 2', null);
-      stmt.finalize();
-      console.log('Додано початкові товари');
-    }
-  });
 });
 
 
@@ -323,6 +308,12 @@ ${body}
 </body></html>`;
 
 /* ---------- маршрути ---------- */
+app.get('/products', (req, res) => {
+  db.all(`SELECT * FROM products`, (err, rows) => {
+    if(err) return res.status(500).send('Помилка бази даних');
+    res.render('products', {products: rows});
+  });
+});
 
 app.get('/',(req,res)=>{
   db.all(`SELECT p.*, (SELECT file FROM images WHERE prod=p.id LIMIT 1) img,
