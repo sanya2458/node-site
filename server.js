@@ -38,6 +38,21 @@ db.serialize(()=>{
       const hash=bcrypt.hashSync('admin',10);
       db.run(`INSERT INTO users(email,pass,first,last,role)
               VALUES('admin@example.com',?, 'Admin','Admin','admin')`,hash);
+  db.get(`SELECT COUNT(*) AS count FROM products`, (err, row) => {
+  if (err) {
+    console.error(err);
+    return;
+  }
+  if (row.count === 0) {
+    // Додаємо початкові товари
+    const stmt = db.prepare(`INSERT INTO products(name, price, descr, cat) VALUES (?, ?, ?, ?)`);
+    stmt.run('Товар 1', 100, 'Опис товару 1', null);
+    stmt.run('Товар 2', 200, 'Опис товару 2', null);
+    stmt.finalize();
+    console.log('Додано початкові товари');
+  }
+});
+
     }
   });
 });
