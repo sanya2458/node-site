@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 /* ---------- база ---------- */
 const db = new sqlite3.Database('shop.db');
-db.serialize(()=>{
+db.serialize(() => {
   db.run(`PRAGMA foreign_keys=ON`);
   db.run(`CREATE TABLE IF NOT EXISTS users(
     id INTEGER PRIMARY KEY, email TEXT UNIQUE, pass TEXT,
@@ -33,29 +33,30 @@ db.serialize(()=>{
   db.run(`CREATE TABLE IF NOT EXISTS cart(
     uid INTEGER, pid INTEGER, qty INTEGER, PRIMARY KEY(uid,pid))`);
 
-  db.get(`SELECT id FROM users WHERE role='admin'`,(e,row)=>{
-    if(!row){
-      const hash=bcrypt.hashSync('admin',10);
+  db.get(`SELECT id FROM users WHERE role='admin'`, (e, row) => {
+    if (!row) {
+      const hash = bcrypt.hashSync('admin', 10);
       db.run(`INSERT INTO users(email,pass,first,last,role)
-              VALUES('admin@example.com',?, 'Admin','Admin','admin')`,hash);
-  db.get(`SELECT COUNT(*) AS count FROM products`, (err, row) => {
-  if (err) {
-    console.error(err);
-    return;
-  }
-  if (row.count === 0) {
-    // Додаємо початкові товари
-    const stmt = db.prepare(`INSERT INTO products(name, price, descr, cat) VALUES (?, ?, ?, ?)`);
-    stmt.run('Товар 1', 100, 'Опис товару 1', null);
-    stmt.run('Товар 2', 200, 'Опис товару 2', null);
-    stmt.finalize();
-    console.log('Додано початкові товари');
-  }
-});
+              VALUES('admin@example.com',?, 'Admin','Admin','admin')`, hash);
+    }
+  });
 
+  // Ось тут перевірка і додавання товарів
+  db.get(`SELECT COUNT(*) AS count FROM products`, (err, row) => {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    if (row.count === 0) {
+      const stmt = db.prepare(`INSERT INTO products(name, price, descr, cat) VALUES (?, ?, ?, ?)`);
+      stmt.run('Товар 1', 100, 'Опис товару 1', null);
+      stmt.run('Товар 2', 200, 'Опис товару 2', null);
+      stmt.finalize();
+      console.log('Додано початкові товари');
     }
   });
 });
+
 
 /* ---------- файли ---------- */
 const uploadDir = path.join(__dirname,'public','uploads');
