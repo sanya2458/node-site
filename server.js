@@ -768,6 +768,30 @@ app.post('/admin/prod/imgdelete', mustAdmin, (req,res)=>{
   });
 });
 
+// ДОДАЙ одразу після інших адмін-роутів
+app.post('/admin/prod/delete', mustAdmin, (req, res) => {
+  const id = +req.body.id;
+  if (!id) return res.redirect('/admin');
+
+  db.all('SELECT file FROM images WHERE prod=?', [id], (e, imgs) => {
+    // видаляємо файли з диска
+    if (!e && imgs) {
+      imgs.forEach(im => {
+        try { fs.unlinkSync(path.join(uploadDir, im.file)); } catch {}
+      });
+    }
+
+    // видаляємо записи у всіх таблицях
+    db.serialize(() => {
+      db.run('DELETE FROM images  WHERE prod=?', id);
+      db.run('DELETE FROM reviews WHERE prod=?', id);
+      db.run('DELETE FROM cart    WHERE pid=?', id);
+      db.run('DELETE FROM products WHERE id=?',  id, () => res.redirect('/admin'));
+    });
+  });
+});
+
+
 app.get('/admin/del/:id', mustAdmin, (req, res) => {
   const pid = req.params.id;
 
