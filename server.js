@@ -75,9 +75,9 @@ app.get('/', (req, res) => {
 
   <form method="POST" action="/vote" class="vote">
     <button class="yes" name="vote" value="yes">Я за</button>
-    <button class="no" name="vote" value="no">Я проти (не проти)</button>
+    <button class="no" name="vote" value="no">Я тоже за але червоним</button>
   </form>
-  <p style="text-align:center;">Голосів: За — ${votes.yes}, не Проти — ${votes.no}</p>
+  <p style="text-align:center;">Голосів: За — ${votes.yes}, за але червоним — ${votes.no}</p>
 
   <form method="POST" action="/comment">
     <input name="name" placeholder="Ім’я (необов’язково)">
