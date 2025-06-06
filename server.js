@@ -34,7 +34,7 @@ app.get('/', (req, res) => {
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
-  <title>Кандидат на мера</title>
+  <title>Тернопіль тут</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: sans-serif; margin: 0; background: #fdfdfd; color: #222; }
@@ -57,7 +57,7 @@ app.get('/', (req, res) => {
 </head>
 <body>
 <header>
-  <div><strong>Кандидат на мера</strong></div>
+  <div><strong>Тернопіль тут</strong></div>
   <div class="burger" onclick="toggleMenu()">
     <span></span><span></span><span></span>
   </div>
@@ -69,15 +69,15 @@ app.get('/', (req, res) => {
 <div class="container">
   ${photo ? `<img src="${photo}" alt="Кандидат">` : ''}
   <div class="promises">
-    <h3>Передвиборчі обіцянки</h3>
+    <h3>Покращимо місто разом !</h3>
     <p>${promises}</p>
   </div>
 
   <form method="POST" action="/vote" class="vote">
     <button class="yes" name="vote" value="yes">Я за</button>
-    <button class="no" name="vote" value="no">Я проти</button>
+    <button class="no" name="vote" value="no">Я проти (не проти)</button>
   </form>
-  <p style="text-align:center;">Голосів: За — ${votes.yes}, Проти — ${votes.no}</p>
+  <p style="text-align:center;">Голосів: За — ${votes.yes}, не Проти — ${votes.no}</p>
 
   <form method="POST" action="/comment">
     <input name="name" placeholder="Ім’я (необов’язково)">
@@ -88,7 +88,7 @@ app.get('/', (req, res) => {
   ${comments.map(c => `<div class="comment"><b>${c.name}</b>: ${c.text}</div>`).join('')}
 </div>
 
-<footer>© 2025 Кандидат на мера</footer>
+<footer>© 2025 Всі права захищено </footer>
 <script>
 function toggleMenu() {
   const m = document.getElementById('menu');
