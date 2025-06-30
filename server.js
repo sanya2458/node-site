@@ -37,12 +37,12 @@ app.use(session({ secret:'simple-secret', resave:false, saveUninitialized:false 
 app.use('/public', express.static(path.join(__dirname,'public')));
 
 const dict={
- ua:{title:'Тернопіль тут',add:'Додати пост',deleteAll:'Видалити все',logout:'Вийти',login:'Увійти',
+ ua:{title:'fredllosgram',add:'Додати пост',deleteAll:'Видалити все',logout:'Вийти',login:'Увійти',
      wrong:'Невірний логін або пароль',back:'Назад',edit:'Редагувати',remove:'Видалити',conf:'Видалити цей пост?',
      commentPl:'Коментар...',send:'Надіслати',settings:'Налаштування',save:'Зберегти',lang:'EN',
      search:'Пошук...',likes:'Лайки',delCommentConf:'Видалити цей коментар?',namePrompt:'Введіть ваше ім\'я',
      showComments:'Показати коментарі',hideComments:'Сховати коментарі'},
- en:{title:'Ternopil here',add:'Add post',deleteAll:'Delete all',logout:'Logout',login:'Login',
+ en:{title:'fredllosgram',add:'Add post',deleteAll:'Delete all',logout:'Logout',login:'Login',
      wrong:'Invalid login or password',back:'Back',edit:'Edit',remove:'Delete',conf:'Delete this post?',
      commentPl:'Comment...',send:'Send',settings:'Settings',save:'Save',lang:'UA',
      search:'Search...',likes:'Likes',delCommentConf:'Delete this comment?',namePrompt:'Enter your name',
