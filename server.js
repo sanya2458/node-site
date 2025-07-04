@@ -35,6 +35,8 @@ const upload = multer({
 app.use(bodyParser.urlencoded({ extended:true }));
 app.use(session({ secret:'simple-secret', resave:false, saveUninitialized:false }));
 app.use('/public', express.static(path.join(__dirname,'public')));
+app.use('/robots.txt', express.static('robots.txt'));
+
 
 const dict={
  ua:{title:'fredllosgram',add:'Додати пост',deleteAll:'Видалити все',logout:'Вийти',login:'Увійти',
