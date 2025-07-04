@@ -55,6 +55,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;'
 function page(req,content,title=''){
 return `<!DOCTYPE html><html lang="${req.session.lang||'ua'}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="google-site-verification" content="xYGIPAY60NiTzav4m1TB-aeK46g11-Bc72LhIYOVVQI" />
 <title>${t(req,'title')}${title}</title>
 <style>
  body{font-family:'Segoe UI',sans-serif;background:#1f2a38;color:#fff;margin:0}
