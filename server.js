@@ -1,3 +1,14 @@
+require('dotenv').config();
+const mongoose = require('mongoose');
+const cloudinary = require('cloudinary').v2;
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error(err));
+
+cloudinary.config({
+  url: process.env.CLOUDINARY_URL
+});
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
